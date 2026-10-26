@@ -1,0 +1,10 @@
+{
+  "name": "pi-frugal",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "keywords": ["pi-package"],
+  "pi": { "extensions": ["./src/extension.ts"] },
+  "scripts": { "test": "node --experimental-strip-types --test test/*.test.ts" },
+  "peerDependencies": { "@earendil-works/pi-coding-agent": "*" }
+}
