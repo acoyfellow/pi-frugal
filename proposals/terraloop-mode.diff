@@ -1,0 +1,19 @@
+--- a/extension.ts
++++ b/extension.ts
+@@ pi.on("before_agent_start", (event, ctx) => {
+     const state = readSessionState(ctx);
+-    if (state.phase === "off") return undefined;
++    if (state.phase === "off") {
++      delete event.systemPromptOptions.sections["terraloop"];
++      return undefined;
++    }
+     const rules = [
+       `TERRALOOP MODE ACTIVE IN THIS PI SESSION — phase ${state.phase}.`,
+-      describeState(state),
++      describePhaseOnly(state),
+       ...
+     ].join("\n");
+-    return { systemPrompt: `${event.systemPrompt}\n\n${rules}` };
++    event.systemPromptOptions.sections["terraloop"] = rules;
++    return undefined;
+   });

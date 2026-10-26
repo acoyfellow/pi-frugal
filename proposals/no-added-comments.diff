@@ -1,0 +1,10 @@
+--- a/src/extension.ts
++++ b/src/extension.ts
+@@
+ export default function (pi: ExtensionAPI) {
+-  pi.on("before_agent_start", (event) => ({
+-    systemPrompt: `${event.systemPrompt}\n\n${guidance}`,
+-  }));
++  pi.on("before_agent_start", (event) => {
++    event.systemPromptOptions.sections["comment-policy"] = guidance;
++  });
