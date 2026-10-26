@@ -39,6 +39,75 @@ export function longestSleepSeconds(command: string): number {
   return longest;
 }
 
+export const MAX_TOOL_CALL_SECONDS = 120;
+export const ALLOW_LONG_MARKER = "# frugal:allow-long";
+
+const TIMEOUT_LIMIT = /(?:^|[\s;&|(`])g?timeout\s+(?:-\S+\s+)*(\d+(?:\.\d+)?)([smhd]?)(?=\s|$)/g;
+const PERL_SHIFT_LIMIT = /perl\s+-e\s+(['"])[^'"]*\balarm\s+shift\b[^'"]*\1\s+(\d+)/g;
+const ALARM_LITERAL_LIMIT = /\balarm\s*\(?\s*(\d+)/g;
+const BACKGROUND_RUN = /(?:^|[\s;&|(])nohup\s|[^&]&\s*$|^\s*\S.*\s&\s*(?:;|$)/;
+const LONG_SCRIPTS: readonly { name: string; pattern: RegExp }[] = [
+  { name: "gate.sh", pattern: /(?:^|[\s/;&|(])gate\.sh\b/ },
+  { name: "gate.mjs", pattern: /(?:^|[\s/;&|(])gate\.mjs\b/ },
+  { name: "a proof/ script", pattern: /(?:^|[\s;&|(]|\.\/)proof\/\S+/ },
+  { name: "wrangler deploy", pattern: /\bwrangler\s+deploy\b/ },
+  { name: "ship.sh", pattern: /(?:^|[\s/;&|(])ship\.sh\b/ },
+  { name: "npm test", pattern: /\b(?:npm|pnpm|yarn|bun)\s+(?:run\s+)?test\b/ },
+  { name: "npx test", pattern: /\bnpx\s+(?:jest|mocha|test)\b/ },
+];
+const VITEST_CALL = /\bvitest\b((?:\s+[^\s;&|]+)*)/;
+const VITEST_MODES = new Set(["run", "watch", "related"]);
+
+export const LONG_CALL_ALTERNATIVES =
+  `Run it in the background (nohup <command> > log 2>&1 &, or a background job that notifies on finish), end the turn, and check with loops_task. A human can end the command with "${ALLOW_LONG_MARKER}" to run it anyway.`;
+
+function secondsOf(value: string, unit: string): number {
+  return Number(value) * (UNIT_SECONDS[unit] ?? 1);
+}
+
+export function timeLimitsSeconds(command: string): number[] {
+  const limits: number[] = [];
+  for (const match of command.matchAll(TIMEOUT_LIMIT)) limits.push(secondsOf(match[1], match[2]));
+  for (const match of command.matchAll(PERL_SHIFT_LIMIT)) limits.push(Number(match[2]));
+  for (const match of command.matchAll(ALARM_LITERAL_LIMIT)) limits.push(Number(match[1]));
+  return limits;
+}
+
+function vitestRunsEverything(command: string): boolean {
+  const call = VITEST_CALL.exec(command);
+  if (!call) return false;
+  const args = call[1].trim().split(/\s+/).filter((arg) => arg.length > 0);
+  return !args.some((arg) => !arg.startsWith("-") && !VITEST_MODES.has(arg));
+}
+
+export function longScriptName(command: string): string | undefined {
+  const script = LONG_SCRIPTS.find((entry) => entry.pattern.test(command));
+  if (script) return script.name;
+  return vitestRunsEverything(command) ? "vitest without a file" : undefined;
+}
+
+export function judgeLongCommand(command: string): WaitVerdict {
+  const trimmed = command.trimEnd();
+  if (trimmed.endsWith(ALLOW_LONG_MARKER)) return { blocked: false, reason: "" };
+  if (BACKGROUND_RUN.test(trimmed)) return { blocked: false, reason: "" };
+  const limits = timeLimitsSeconds(trimmed);
+  const longest = Math.max(0, ...limits);
+  if (longest > MAX_TOOL_CALL_SECONDS) {
+    return {
+      blocked: true,
+      reason: `pi-frugal blocked a ${longest}s time limit (max ${MAX_TOOL_CALL_SECONDS}s). Pi looks frozen and Escape cannot stop it. ${LONG_CALL_ALTERNATIVES}`,
+    };
+  }
+  const script = longScriptName(trimmed);
+  if (script && limits.length === 0) {
+    return {
+      blocked: true,
+      reason: `pi-frugal blocked ${script} with no time limit. It can run for many minutes, and Pi looks frozen while it runs. ${LONG_CALL_ALTERNATIVES}`,
+    };
+  }
+  return { blocked: false, reason: "" };
+}
+
 export function judgeBashCommand(command: string): WaitVerdict {
   const loop = LOOP_PATTERN.exec(command);
   if (loop && SLEEP_WORD.test(command)) {
@@ -48,7 +117,7 @@ export function judgeBashCommand(command: string): WaitVerdict {
   if (seconds > MAX_SLEEP_SECONDS) {
     return { blocked: true, reason: `pi-frugal blocked sleep ${seconds}s (limit ${MAX_SLEEP_SECONDS}s). ${WAIT_ALTERNATIVES}` };
   }
-  return { blocked: false, reason: "" };
+  return judgeLongCommand(command);
 }
 
 export interface PromptSnapshot {

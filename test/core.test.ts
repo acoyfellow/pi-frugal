@@ -3,7 +3,9 @@ import assert from "node:assert/strict";
 import {
   comparePrompts,
   judgeBashCommand,
+  judgeLongCommand,
   longestSleepSeconds,
+  timeLimitsSeconds,
   parseMetricsLines,
   reportMetrics,
   shouldCompactOnResume,
@@ -88,4 +90,58 @@ test("metrics report sums runs and ignores foreign lines", () => {
   assert.equal(report.newRunBreakRate, 0.5);
   assert.equal(report.blockedSleeps, 2);
   assert.equal(report.turnsOver200k, 0);
+});
+
+const longCallCases: readonly { command: string; blocked: boolean; why: string }[] = [
+  { command: "perl -e 'alarm shift; exec @ARGV' 1500 ./proof/stable-gate.sh", blocked: true, why: "the 25-minute freeze" },
+  { command: "perl -e 'alarm shift; exec @ARGV' 90 pi -p hi", blocked: false, why: "perl alarm under the limit" },
+  { command: "perl -e 'alarm(600); exec @ARGV' make", blocked: true, why: "literal perl alarm" },
+  { command: "timeout 300 npm test", blocked: true, why: "timeout over the limit" },
+  { command: "gtimeout 5m bun test", blocked: true, why: "gtimeout with a unit" },
+  { command: "timeout -k 5 100 ./gate.sh", blocked: false, why: "limited gate under the limit" },
+  { command: "timeout 2h make", blocked: true, why: "timeout in hours" },
+  { command: "./proof/gate.sh", blocked: true, why: "proof script, no limit" },
+  { command: "cd ~/x && bash gate.sh", blocked: true, why: "gate.sh, no limit" },
+  { command: "node scripts/gate.mjs", blocked: true, why: "gate.mjs, no limit" },
+  { command: "npx wrangler deploy", blocked: true, why: "wrangler deploy, no limit" },
+  { command: "./ship.sh prod", blocked: true, why: "ship.sh, no limit" },
+  { command: "npm test", blocked: true, why: "npm test, no limit" },
+  { command: "npm run test -- --watch=false", blocked: true, why: "npm run test, no limit" },
+  { command: "npx vitest run", blocked: true, why: "vitest without a file" },
+  { command: "npx vitest", blocked: true, why: "bare vitest" },
+  { command: "npx vitest run src/core.test.ts", blocked: false, why: "vitest with a file" },
+  { command: "nohup ./proof/gate.sh > /tmp/gate.log 2>&1 &", blocked: false, why: "background with nohup" },
+  { command: "./proof/gate.sh > gate.log 2>&1 &", blocked: false, why: "background job" },
+  { command: "./proof/gate.sh # frugal:allow-long", blocked: false, why: "human override marker" },
+  { command: "timeout 900 ./ship.sh # frugal:allow-long", blocked: false, why: "marker beats a long limit" },
+  { command: "wrangler dev --port 8787 &", blocked: false, why: "backgrounded dev server" },
+  { command: "git status && ls", blocked: false, why: "ordinary command" },
+  { command: "grep -rn timeout src", blocked: false, why: "timeout as a search word" },
+  { command: "./proof/gate.sh && true", blocked: true, why: "&& is not a background job" },
+];
+
+test("long tool calls follow the case table", () => {
+  for (const { command, blocked, why } of longCallCases) {
+    assert.equal(judgeLongCommand(command).blocked, blocked, `${why}: ${command}`);
+    assert.equal(judgeBashCommand(command).blocked, blocked, `bash verdict, ${why}: ${command}`);
+  }
+});
+
+test("long call blocks say how to run it in the background", () => {
+  for (const command of ["perl -e 'alarm shift; exec @ARGV' 1500 ./x.sh", "./proof/gate.sh"]) {
+    const { reason } = judgeLongCommand(command);
+    assert.match(reason, /nohup/);
+    assert.match(reason, /> log 2>&1 &/);
+    assert.match(reason, /end the turn/);
+    assert.match(reason, /loops_task/);
+    assert.match(reason, /# frugal:allow-long/);
+  }
+  assert.match(judgeLongCommand("timeout 300 make").reason, /300s time limit \(max 120s\)/);
+  assert.match(judgeLongCommand("npm test").reason, /npm test with no time limit/);
+});
+
+test("time limits are read from timeout, gtimeout and perl alarm", () => {
+  assert.deepEqual(timeLimitsSeconds("timeout 30s a; gtimeout 2m b"), [30, 120]);
+  assert.deepEqual(timeLimitsSeconds("perl -e 'alarm shift; exec @ARGV' 1500 x"), [1500]);
+  assert.deepEqual(timeLimitsSeconds("echo hi"), []);
 });
