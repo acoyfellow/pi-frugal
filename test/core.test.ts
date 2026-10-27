@@ -21,13 +21,25 @@ function turn(cacheRead: number, cacheWrite: number, cost = 0.01): TurnUsage {
   return { input: 10, output: 100, cacheRead, cacheWrite, cost };
 }
 
-test("compact on resume needs idle time and a large context", () => {
-  const now = 100 * MINUTE;
-  assert.equal(shouldCompactOnResume({ nowMs: now, lastAssistantMs: now - 6 * MINUTE, contextTokens: 150_000 }), true);
-  assert.equal(shouldCompactOnResume({ nowMs: now, lastAssistantMs: now - 4 * MINUTE, contextTokens: 150_000 }), false);
-  assert.equal(shouldCompactOnResume({ nowMs: now, lastAssistantMs: now - 60 * MINUTE, contextTokens: 90_000 }), false);
-  assert.equal(shouldCompactOnResume({ nowMs: now, lastAssistantMs: undefined, contextTokens: 150_000 }), false);
-  assert.equal(shouldCompactOnResume({ nowMs: now, lastAssistantMs: 0, contextTokens: null }), false);
+const resumeCases: readonly { idleMinutes: number | undefined; tokens: number | null; window: number | undefined; compact: boolean; why: string }[] = [
+  { idleMinutes: 61, tokens: 200_000, window: 400_000, compact: true, why: "cold cache, half of a 400k window" },
+  { idleMinutes: 61, tokens: 100_000, window: 200_000, compact: true, why: "same share on a 200k model" },
+  { idleMinutes: 61, tokens: 640_000, window: 1_000_000, compact: true, why: "1M model past half" },
+  { idleMinutes: 61, tokens: 400_000, window: 1_000_000, compact: false, why: "1M model under half" },
+  { idleMinutes: 6, tokens: 300_000, window: 400_000, compact: false, why: "short pause, cache may still be warm" },
+  { idleMinutes: 45, tokens: 300_000, window: 400_000, compact: false, why: "inside one-hour retention" },
+  { idleMinutes: 120, tokens: 90_000, window: 400_000, compact: false, why: "the 90k early compaction from the field" },
+  { idleMinutes: 120, tokens: 150_000, window: undefined, compact: false, why: "unknown window" },
+  { idleMinutes: undefined, tokens: 300_000, window: 400_000, compact: false, why: "no earlier reply" },
+  { idleMinutes: 120, tokens: null, window: 400_000, compact: false, why: "unknown tokens" },
+];
+
+test("compact on resume only when the cache is cold and the context fills half the window", () => {
+  const now = 1000 * MINUTE;
+  for (const { idleMinutes, tokens, window, compact, why } of resumeCases) {
+    const lastAssistantMs = idleMinutes === undefined ? undefined : now - idleMinutes * MINUTE;
+    assert.equal(shouldCompactOnResume({ nowMs: now, lastAssistantMs, contextTokens: tokens, contextWindow: window }), compact, why);
+  }
 });
 
 test("sleep longer than five seconds is blocked", () => {

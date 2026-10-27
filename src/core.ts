@@ -1,5 +1,5 @@
-export const RESUME_IDLE_MS = 5 * 60 * 1000;
-export const RESUME_MIN_TOKENS = 100_000;
+export const RESUME_IDLE_MS = 60 * 60 * 1000;
+export const RESUME_MIN_WINDOW_SHARE = 0.5;
 export const MAX_SLEEP_SECONDS = 5;
 export const BIG_CONTEXT_TOKENS = 200_000;
 export const CACHE_BREAK_WRITE_TOKENS = 100_000;
@@ -8,13 +8,16 @@ export interface ResumeInput {
   nowMs: number;
   lastAssistantMs: number | undefined;
   contextTokens: number | null | undefined;
+  contextWindow: number | undefined;
 }
 
 export function shouldCompactOnResume(input: ResumeInput): boolean {
   if (input.lastAssistantMs === undefined) return false;
   if (input.contextTokens === null || input.contextTokens === undefined) return false;
+  if (!input.contextWindow || input.contextWindow <= 0) return false;
   const idleMs = input.nowMs - input.lastAssistantMs;
-  return idleMs > RESUME_IDLE_MS && input.contextTokens > RESUME_MIN_TOKENS;
+  const windowShare = input.contextTokens / input.contextWindow;
+  return idleMs > RESUME_IDLE_MS && windowShare >= RESUME_MIN_WINDOW_SHARE;
 }
 
 export interface WaitVerdict {

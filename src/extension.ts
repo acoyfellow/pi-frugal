@@ -78,10 +78,12 @@ export default function frugal(pi: ExtensionAPI) {
     if (resumeCompactionPending || event.streamingBehavior !== undefined || event.source === "extension") {
       return { action: "continue" };
     }
+    const usage = ctx.getContextUsage();
     const decision = shouldCompactOnResume({
       nowMs: Date.now(),
       lastAssistantMs: lastAssistantOnBranch(ctx)?.timestamp,
-      contextTokens: ctx.getContextUsage()?.tokens,
+      contextTokens: usage?.tokens,
+      contextWindow: usage?.contextWindow,
     });
     if (!decision) return { action: "continue" };
     resumeCompactionPending = true;
