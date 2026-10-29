@@ -128,6 +128,11 @@ const longCallCases: readonly { command: string; blocked: boolean; why: string }
   { command: "timeout 900 ./ship.sh # frugal:allow-long", blocked: false, why: "marker beats a long limit" },
   { command: "wrangler dev --port 8787 &", blocked: false, why: "backgrounded dev server" },
   { command: "git status && ls", blocked: false, why: "ordinary command" },
+  { command: "chmod +x proof/loop-gate.sh && git add proof/eval.ts", blocked: false, why: "touching proof files does not run them" },
+  { command: "cat proof/gate.sh", blocked: false, why: "reading a proof file" },
+  { command: "bash proof/loop-gate.sh", blocked: true, why: "bash runs a proof script" },
+  { command: "node --experimental-strip-types proof/eval.ts", blocked: true, why: "node runs a proof script" },
+  { command: "cd ~/x && ./proof/gate.sh", blocked: true, why: "proof script after cd" },
   { command: "grep -rn timeout src", blocked: false, why: "timeout as a search word" },
   { command: "./proof/gate.sh && true", blocked: true, why: "&& is not a background job" },
 ];

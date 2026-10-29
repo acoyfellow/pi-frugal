@@ -49,12 +49,17 @@ const TIMEOUT_LIMIT = /(?:^|[\s;&|(`])g?timeout\s+(?:-\S+\s+)*(\d+(?:\.\d+)?)([s
 const PERL_SHIFT_LIMIT = /perl\s+-e\s+(['"])[^'"]*\balarm\s+shift\b[^'"]*\1\s+(\d+)/g;
 const ALARM_LITERAL_LIMIT = /\balarm\s*\(?\s*(\d+)/g;
 const BACKGROUND_RUN = /(?:^|[\s;&|(])nohup\s|[^&]&\s*$|^\s*\S.*\s&\s*(?:;|$)/;
+function runsScript(path: string): RegExp {
+  const runner = String.raw`(?:^|[;&|(]\s*|\b(?:bash|sh|zsh|node|bun|tsx|npx)\s+(?:--?\S+\s+)*)`;
+  return new RegExp(String.raw`${runner}(?:[\w.~/-]*/)?${path}`);
+}
+
 const LONG_SCRIPTS: readonly { name: string; pattern: RegExp }[] = [
-  { name: "gate.sh", pattern: /(?:^|[\s/;&|(])gate\.sh\b/ },
-  { name: "gate.mjs", pattern: /(?:^|[\s/;&|(])gate\.mjs\b/ },
-  { name: "a proof/ script", pattern: /(?:^|[\s;&|(]|\.\/)proof\/\S+/ },
+  { name: "gate.sh", pattern: runsScript(String.raw`gate\.sh\b`) },
+  { name: "gate.mjs", pattern: runsScript(String.raw`gate\.mjs\b`) },
+  { name: "a proof/ script", pattern: runsScript(String.raw`proof/\S+`) },
   { name: "wrangler deploy", pattern: /\bwrangler\s+deploy\b/ },
-  { name: "ship.sh", pattern: /(?:^|[\s/;&|(])ship\.sh\b/ },
+  { name: "ship.sh", pattern: runsScript(String.raw`ship\.sh\b`) },
   { name: "npm test", pattern: /\b(?:npm|pnpm|yarn|bun)\s+(?:run\s+)?test\b/ },
   { name: "npx test", pattern: /\bnpx\s+(?:jest|mocha|test)\b/ },
 ];
