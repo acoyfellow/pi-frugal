@@ -44,7 +44,12 @@ function percentile(sorted: readonly number[], share: number): number {
   return sorted[index] ?? 0;
 }
 
-export function replaySession(turns: readonly ReplayTurn[], prices: ReadonlyMap<string, ModelPrices>, policy: CachePolicy): ReplayScore {
+export function replaySession(
+  turns: readonly ReplayTurn[],
+  prices: ReadonlyMap<string, ModelPrices>,
+  policy: CachePolicy,
+  prefixEdits: readonly (number | undefined)[] = [],
+): ReplayScore {
   let cost = 0;
   let recordedCost = 0;
   let cacheBreaks = 0;
@@ -61,7 +66,9 @@ export function replaySession(turns: readonly ReplayTurn[], prices: ReadonlyMap<
       continue;
     }
     const warm = previous !== undefined && previous.model === turn.model && turn.atMs - previous.atMs <= policy.ttlMs;
-    const cachedPrefix = warm && previous ? Math.min(contextOf(previous), context) : 0;
+    const edit = prefixEdits[contexts.length - 1];
+    const intactPrefix = warm && previous ? Math.min(contextOf(previous), context) : 0;
+    const cachedPrefix = edit === undefined ? intactPrefix : Math.min(intactPrefix, edit);
     const written = context - cachedPrefix;
     if (!warm && previous !== undefined) cacheBreaks++;
     cost +=

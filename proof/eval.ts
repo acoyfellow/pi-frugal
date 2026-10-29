@@ -1,7 +1,7 @@
 import { existsSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { applySpill, spillCount, type SessionEvent, type SpillRule } from "../src/context-rules.ts";
+import { applySpillAndImageDrop, spillCount, type ImageDropRule, type SessionEvent, type SpillRule } from "../src/context-rules.ts";
 import { FIVE_MINUTE_POLICY, ONE_HOUR_POLICY, derivePricesFromCostParts, replaySession, sumScores, type PricedTurn, type ReplayTurn } from "../src/replay.ts";
 
 interface RawUsage {
@@ -128,6 +128,13 @@ function parseSpill(value: string | undefined): SpillRule | undefined {
 }
 
 const spill = parseSpill(process.env.TUNE_SPILL);
+const keepLatest = Number(process.env.TUNE_DROP_KEEP ?? "");
+const drop: ImageDropRule | undefined = Number.isInteger(keepLatest) && process.env.TUNE_DROP_KEEP ? { keepLatest, tokensPerImage: 1_400 } : undefined;
+
+function replayRule(session: SessionFile, policy: (typeof policies)[number]) {
+  const rebuilt = applySpillAndImageDrop(session.events, spill, drop);
+  return replaySession(rebuilt.map((r) => r.turn), prices, policy, rebuilt.map((r) => r.prefixEditedFrom));
+}
 const result = {
   at: new Date().toISOString(),
   sessions: sessions.length,
@@ -136,11 +143,12 @@ const result = {
   models: [...prices.keys()],
   unpricedTurns: sessions.reduce((sum, session) => sum + session.turns.filter((turn) => !prices.has(turn.model)).length, 0),
   scores: policies.map((policy) => sumScores(policy.name, sessions.map((session) => replaySession(session.turns, prices, policy)))),
-  rule: spill
+  rule: spill || drop
     ? {
-        spill,
+        spill: spill ?? null,
+        drop: drop ?? null,
         spills: sessions.reduce((sum, session) => sum + spillCount(session.events, spill), 0),
-        scores: policies.map((policy) => sumScores(policy.name, sessions.map((session) => replaySession(applySpill(session.events, spill), prices, policy)))),
+        scores: policies.map((policy) => sumScores(policy.name, sessions.map((session) => replayRule(session, policy)))),
       }
     : null,
 };

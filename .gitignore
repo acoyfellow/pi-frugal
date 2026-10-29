@@ -4,3 +4,4 @@ tune-dry.log
 eval-spill-*.json
 sweep.log
 live/out-*
+eval-r4-*.json

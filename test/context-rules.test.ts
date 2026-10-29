@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { applySpill, spillCount, spilledTokens, type SessionEvent } from "../src/context-rules.ts";
+import { applySpill, applySpillAndImageDrop, spillCount, spilledTokens, type SessionEvent } from "../src/context-rules.ts";
 import type { ReplayTurn } from "../src/replay.ts";
 
 const rule = { thresholdChars: 20_000, stubChars: 400 };
@@ -45,6 +45,21 @@ test("no rule keeps the recorded context and the turn order", () => {
 
 test("context never goes below zero", () => {
   assert.deepEqual(contexts([{ kind: "tool-result", chars: 400_400, images: 0 }, turn(1_000)]), [0]);
+});
+
+test("dropping old images shrinks context and marks where the cached prefix was edited", () => {
+  const drop = { keepLatest: 1, tokensPerImage: 1_000 };
+  const shot: SessionEvent = { kind: "tool-result", chars: 100, images: 1 };
+  const rebuilt = applySpillAndImageDrop([turn(10_000), shot, turn(12_000), shot, turn(14_000), turn(15_000)], undefined, drop);
+  assert.deepEqual(rebuilt.map((r) => r.turn.cacheWrite), [10_000, 12_000, 13_000, 14_000]);
+  assert.deepEqual(rebuilt.map((r) => r.prefixEditedFrom), [undefined, undefined, 10_000, undefined]);
+});
+
+test("no drop rule never edits the prefix", () => {
+  const shot: SessionEvent = { kind: "tool-result", chars: 100, images: 1 };
+  const rebuilt = applySpillAndImageDrop([turn(10_000), shot, turn(12_000), shot, turn(14_000)], undefined, undefined);
+  assert.ok(rebuilt.every((r) => r.prefixEditedFrom === undefined));
+  assert.deepEqual(rebuilt.map((r) => r.turn.cacheWrite), [10_000, 12_000, 14_000]);
 });
 
 test("image bytes are never counted as spillable text", () => {

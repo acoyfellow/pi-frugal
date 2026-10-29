@@ -41,6 +41,14 @@ test("a shrunk context after compaction reads only what is still cached", () => 
   assert.equal(score.cost, 300 * 1.25 + 100 * 0.1);
 });
 
+test("an edit inside the warm prefix rewrites everything after it", () => {
+  const turns = [turn(0, 100), turn(1, 150)];
+  const intact = replaySession(turns, prices, FIVE_MINUTE_POLICY);
+  const edited = replaySession(turns, prices, FIVE_MINUTE_POLICY, [undefined, 40]);
+  assert.equal(edited.cost, 100 * 1.25 + 40 * 0.1 + 110 * 1.25);
+  assert.ok(edited.cost > intact.cost);
+});
+
 test("a model switch is a cache break", () => {
   const other = { ...turn(1, 100), model: "n" };
   const both = new Map([...prices, ["n", unitPrice]]);
