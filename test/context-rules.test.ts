@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { applySpill, applySpillAndImageDrop, spillCount, spilledTokens, type SessionEvent } from "../src/context-rules.ts";
+import { applyCompactionThreshold, applySpill, applySpillAndImageDrop, spillCount, spilledTokens, type SessionEvent } from "../src/context-rules.ts";
 import type { ReplayTurn } from "../src/replay.ts";
 
 const rule = { thresholdChars: 20_000, stubChars: 400 };
@@ -66,4 +66,24 @@ test("image bytes are never counted as spillable text", () => {
   const screenshot: SessionEvent = { kind: "tool-result", chars: 400, images: 1 };
   assert.deepEqual(contexts([screenshot, turn(5_000)]), [5_000]);
   assert.equal(spillCount([screenshot], rule), 0);
+});
+
+test("compaction at a threshold adds a summary turn and rewrites the next prefix", () => {
+  const rule = { thresholdTokens: 100_000, keepRecentTokens: 20_000, summaryTokens: 5_000 };
+  const base = [50_000, 110_000, 120_000].map((c) => ({ turn: (turn(c) as { turn: ReplayTurn }).turn, prefixEditedFrom: undefined }));
+  const out = applyCompactionThreshold(base, rule);
+  assert.deepEqual(out.map((r) => r.turn.cacheWrite), [50_000, 110_000, 110_000, 35_000]);
+  assert.deepEqual(out.map((r) => r.turn.output), [5, 5, 5_000, 5]);
+  assert.deepEqual(out.map((r) => r.prefixEditedFrom), [undefined, undefined, undefined, 0]);
+});
+
+test("a real compaction in the recording resets the simulated offset", () => {
+  const rule = { thresholdTokens: 100_000, keepRecentTokens: 20_000, summaryTokens: 5_000 };
+  const base = [110_000, 30_000, 60_000].map((c) => ({ turn: (turn(c) as { turn: ReplayTurn }).turn, prefixEditedFrom: undefined }));
+  assert.deepEqual(applyCompactionThreshold(base, rule).map((r) => r.turn.cacheWrite), [110_000, 110_000, 30_000, 60_000]);
+});
+
+test("no compaction rule returns the turns unchanged", () => {
+  const base = [{ turn: (turn(500_000) as { turn: ReplayTurn }).turn, prefixEditedFrom: undefined }];
+  assert.deepEqual(applyCompactionThreshold(base, undefined), base);
 });

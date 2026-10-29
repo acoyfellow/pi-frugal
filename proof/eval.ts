@@ -1,7 +1,7 @@
 import { existsSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { applySpillAndImageDrop, spillCount, type ImageDropRule, type SessionEvent, type SpillRule } from "../src/context-rules.ts";
+import { applyCompactionThreshold, applySpillAndImageDrop, spillCount, type CompactionRule, type ImageDropRule, type SessionEvent, type SpillRule } from "../src/context-rules.ts";
 import { FIVE_MINUTE_POLICY, ONE_HOUR_POLICY, derivePricesFromCostParts, replaySession, sumScores, type PricedTurn, type ReplayTurn } from "../src/replay.ts";
 
 interface RawUsage {
@@ -131,8 +131,13 @@ const spill = parseSpill(process.env.TUNE_SPILL);
 const keepLatest = Number(process.env.TUNE_DROP_KEEP ?? "");
 const drop: ImageDropRule | undefined = Number.isInteger(keepLatest) && process.env.TUNE_DROP_KEEP ? { keepLatest, tokensPerImage: 1_400 } : undefined;
 
+const compactAt = Number(process.env.TUNE_COMPACT_AT ?? "");
+const compaction: CompactionRule | undefined = compactAt > 0
+  ? { thresholdTokens: compactAt, keepRecentTokens: Number(process.env.TUNE_KEEP_RECENT ?? 30_000), summaryTokens: 8_000 }
+  : undefined;
+
 function replayRule(session: SessionFile, policy: (typeof policies)[number]) {
-  const rebuilt = applySpillAndImageDrop(session.events, spill, drop);
+  const rebuilt = applyCompactionThreshold(applySpillAndImageDrop(session.events, spill, drop), compaction);
   return replaySession(rebuilt.map((r) => r.turn), prices, policy, rebuilt.map((r) => r.prefixEditedFrom));
 }
 const result = {
@@ -143,10 +148,11 @@ const result = {
   models: [...prices.keys()],
   unpricedTurns: sessions.reduce((sum, session) => sum + session.turns.filter((turn) => !prices.has(turn.model)).length, 0),
   scores: policies.map((policy) => sumScores(policy.name, sessions.map((session) => replaySession(session.turns, prices, policy)))),
-  rule: spill || drop
+  rule: spill || drop || compaction
     ? {
         spill: spill ?? null,
         drop: drop ?? null,
+        compaction: compaction ?? null,
         spills: sessions.reduce((sum, session) => sum + spillCount(session.events, spill), 0),
         scores: policies.map((policy) => sumScores(policy.name, sessions.map((session) => replayRule(session, policy)))),
       }
