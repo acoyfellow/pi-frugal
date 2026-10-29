@@ -11,6 +11,7 @@ provider=/Users/jcoeyman/.pi/agent/extensions/opencode-cloudflare/index.ts
 count=$(node -e 'console.log(require(process.argv[1]).length)' "$root/live/tasks.json")
 for index in $(seq 0 $((count - 1))); do
   id=$(node -e 'console.log(require(process.argv[1])[process.argv[2]].id)' "$root/live/tasks.json" "$index")
+  if [ -n "${TUNE_TASKS:-}" ] && [[ ",$TUNE_TASKS," != *",$id,"* ]]; then continue; fi
   prompt=$(node -e 'console.log(require(process.argv[1])[process.argv[2]].prompt)' "$root/live/tasks.json" "$index")
   start=$(date +%s)
   (

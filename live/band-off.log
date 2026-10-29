@@ -1,0 +1,1 @@
+{"label":"band-off","spill":null,"at":"2026-10-29T13:51:08.218Z","passed":2,"total":2,"cost":0.09194079999999999,"seconds":15,"toolCalls":4,"results":[{"id":"mid-band-log","pass":true,"reply":"8086","cost":0.049146999999999996,"toolCalls":2,"seconds":7},{"id":"mid-band-json","pass":true,"reply":"t3 f00d","cost":0.0427938,"toolCalls":2,"seconds":8}]}

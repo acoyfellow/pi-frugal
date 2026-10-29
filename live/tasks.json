@@ -25,6 +25,16 @@
     "expect": "1234"
   },
   {
+    "id": "mid-band-log",
+    "prompt": "Run this bash command once: node live/fixture.mjs log 250 8086. Then run: echo unrelated work done. Then answer: what is the value of order_id on the line that has status=FAILED? Reply with only the number.",
+    "expect": "8086"
+  },
+  {
+    "id": "mid-band-json",
+    "prompt": "Run this bash command once: node live/fixture.mjs json 180 f00d. Then run: echo next. Then answer: which team is the user named ada on, and what is ada's secret? Reply with the team and the secret separated by one space, and nothing else.",
+    "expect": "t3 f00d"
+  },
+  {
     "id": "two-outputs",
     "prompt": "Run this bash command: node live/fixture.mjs log 3000 5150. Then run: node live/fixture.mjs json 2500 c0de. Then answer with the FAILED order_id and ada's secret, separated by one space, and nothing else.",
     "expect": "5150 c0de"

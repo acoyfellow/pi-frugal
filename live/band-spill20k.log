@@ -1,0 +1,1 @@
+{"label":"band-spill20k","spill":"20000,1600","at":"2026-10-29T13:51:07.936Z","passed":2,"total":2,"cost":0.09194079999999999,"seconds":14,"toolCalls":4,"results":[{"id":"mid-band-log","pass":true,"reply":"8086","cost":0.049146999999999996,"toolCalls":2,"seconds":6},{"id":"mid-band-json","pass":true,"reply":"t3 f00d","cost":0.0427938,"toolCalls":2,"seconds":8}]}

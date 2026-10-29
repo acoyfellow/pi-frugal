@@ -28,7 +28,7 @@ function normalize(text) {
   return text.replace(/[`*"'.]/g, " ").replace(/\s+/g, " ").trim();
 }
 
-const results = tasks.map((task) => {
+const results = tasks.filter((task) => task.id in times).map((task) => {
   const reply = existsSync(join(out, `${task.id}.txt`)) ? readFileSync(join(out, `${task.id}.txt`), "utf8") : "";
   const lastLine = normalize(reply).split(" ").slice(-task.expect.split(" ").length).join(" ");
   const { cost, toolCalls } = sessionCost(task.id);
