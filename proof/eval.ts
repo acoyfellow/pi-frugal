@@ -1,20 +1,20 @@
 import { existsSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { FIVE_MINUTE_POLICY, ONE_HOUR_POLICY, derivePrices, replaySession, sumScores, type ReplayTurn } from "../src/replay.ts";
+import { FIVE_MINUTE_POLICY, ONE_HOUR_POLICY, derivePricesFromCostParts, replaySession, sumScores, type PricedTurn, type ReplayTurn } from "../src/replay.ts";
 
 interface RawUsage {
   input?: number;
   output?: number;
   cacheRead?: number;
   cacheWrite?: number;
-  cost?: { input?: number; output?: number; total?: number };
+  cost?: { input?: number; output?: number; cacheRead?: number; cacheWrite?: number; total?: number };
 }
 
 interface SessionFile {
   path: string;
   turns: ReplayTurn[];
-  raw: { model: string; input: number; output: number; inputCost: number; outputCost: number }[];
+  raw: PricedTurn[];
   kind: "terraloop" | "long" | "short";
 }
 
@@ -56,7 +56,17 @@ function readSession(path: string): SessionFile {
       recordedCost: usage.cost?.total ?? 0,
     };
     turns.push(turn);
-    raw.push({ model, input: turn.input, output: turn.output, inputCost: usage.cost?.input ?? 0, outputCost: usage.cost?.output ?? 0 });
+    raw.push({
+      model,
+      input: turn.input,
+      output: turn.output,
+      cacheRead: turn.cacheRead,
+      cacheWrite: turn.cacheWrite,
+      inputCost: usage.cost?.input ?? 0,
+      outputCost: usage.cost?.output ?? 0,
+      readCost: usage.cost?.cacheRead ?? 0,
+      writeCost: usage.cost?.cacheWrite ?? 0,
+    });
   }
   const kind = terraloop ? "terraloop" : turns.length >= 150 ? "long" : "short";
   return { path, turns, raw, kind };
@@ -83,7 +93,7 @@ function pickSet(): string[] {
 const set: string[] = existsSync(setPath) ? JSON.parse(readFileSync(setPath, "utf8")) : pickSet();
 if (!existsSync(setPath)) writeFileSync(setPath, `${JSON.stringify(set, null, 2)}\n`);
 const sessions = set.filter((path) => existsSync(path)).map(readSession);
-const prices = derivePrices(sessions.flatMap((session) => session.raw));
+const prices = derivePricesFromCostParts(sessions.flatMap((session) => session.raw));
 const policies = [FIVE_MINUTE_POLICY, ONE_HOUR_POLICY];
 const result = {
   at: new Date().toISOString(),
@@ -91,6 +101,7 @@ const result = {
   missing: set.length - sessions.length,
   kinds: Object.fromEntries(["long", "terraloop", "short"].map((kind) => [kind, sessions.filter((session) => session.kind === kind).length])),
   models: [...prices.keys()],
+  unpricedTurns: sessions.reduce((sum, session) => sum + session.turns.filter((turn) => !prices.has(turn.model)).length, 0),
   scores: policies.map((policy) => sumScores(policy.name, sessions.map((session) => replaySession(session.turns, prices, policy)))),
 };
 writeFileSync(outPath, `${JSON.stringify(result, null, 2)}\n`);

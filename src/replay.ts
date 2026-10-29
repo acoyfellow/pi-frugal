@@ -11,17 +11,18 @@ export interface ReplayTurn {
 export interface ModelPrices {
   inputPerToken: number;
   outputPerToken: number;
+  readPerToken: number;
+  writePerToken: number;
 }
 
 export interface CachePolicy {
   name: string;
   ttlMs: number;
-  writeMultiplier: number;
+  writeCost: (price: ModelPrices) => number;
 }
 
-export const READ_MULTIPLIER = 0.1;
-export const FIVE_MINUTE_POLICY: CachePolicy = { name: "cache-5m", ttlMs: 5 * 60_000, writeMultiplier: 1.25 };
-export const ONE_HOUR_POLICY: CachePolicy = { name: "cache-1h", ttlMs: 60 * 60_000, writeMultiplier: 2 };
+export const FIVE_MINUTE_POLICY: CachePolicy = { name: "cache-5m", ttlMs: 5 * 60_000, writeCost: (price) => price.writePerToken };
+export const ONE_HOUR_POLICY: CachePolicy = { name: "cache-1h", ttlMs: 60 * 60_000, writeCost: (price) => price.inputPerToken * 2 };
 
 export interface ReplayScore {
   policy: string;
@@ -64,8 +65,8 @@ export function replaySession(turns: readonly ReplayTurn[], prices: ReadonlyMap<
     const written = context - cachedPrefix;
     if (!warm && previous !== undefined) cacheBreaks++;
     cost +=
-      cachedPrefix * price.inputPerToken * READ_MULTIPLIER +
-      written * price.inputPerToken * policy.writeMultiplier +
+      cachedPrefix * price.readPerToken +
+      written * policy.writeCost(price) +
       turn.output * price.outputPerToken;
     previous = turn;
   }
@@ -96,11 +97,45 @@ export function sumScores(policy: string, scores: readonly ReplayScore[]): Repla
   };
 }
 
-export function derivePrices(turns: readonly { model: string; input: number; output: number; inputCost: number; outputCost: number }[]): Map<string, ModelPrices> {
-  const prices = new Map<string, ModelPrices>();
+export interface PricedTurn {
+  model: string;
+  input: number;
+  output: number;
+  cacheRead: number;
+  cacheWrite: number;
+  inputCost: number;
+  outputCost: number;
+  readCost: number;
+  writeCost: number;
+}
+
+const MIN_SAMPLE_TOKENS = 100;
+
+function rate(cost: number, tokens: number): number | undefined {
+  return tokens >= MIN_SAMPLE_TOKENS && cost > 0 ? cost / tokens : undefined;
+}
+
+export function derivePricesFromCostParts(turns: readonly PricedTurn[]): Map<string, ModelPrices> {
+  const found = new Map<string, Partial<ModelPrices>>();
   for (const turn of turns) {
-    if (prices.has(turn.model) || turn.input < 100 || turn.output < 100) continue;
-    prices.set(turn.model, { inputPerToken: turn.inputCost / turn.input, outputPerToken: turn.outputCost / turn.output });
+    const known = found.get(turn.model) ?? {};
+    known.inputPerToken ??= rate(turn.inputCost, turn.input);
+    known.outputPerToken ??= rate(turn.outputCost, turn.output);
+    known.readPerToken ??= rate(turn.readCost, turn.cacheRead);
+    known.writePerToken ??= rate(turn.writeCost, turn.cacheWrite);
+    found.set(turn.model, known);
+  }
+  const prices = new Map<string, ModelPrices>();
+  for (const [model, known] of found) {
+    const write = known.writePerToken;
+    const input = known.inputPerToken ?? (write === undefined ? undefined : write / 1.25);
+    if (input === undefined || known.outputPerToken === undefined) continue;
+    prices.set(model, {
+      inputPerToken: input,
+      outputPerToken: known.outputPerToken,
+      readPerToken: known.readPerToken ?? input * 0.1,
+      writePerToken: write ?? input * 1.25,
+    });
   }
   return prices;
 }

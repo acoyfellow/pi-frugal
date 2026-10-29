@@ -1,9 +1,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { FIVE_MINUTE_POLICY, ONE_HOUR_POLICY, derivePrices, replaySession, sumScores, type ReplayTurn } from "../src/replay.ts";
+import { FIVE_MINUTE_POLICY, ONE_HOUR_POLICY, derivePricesFromCostParts, replaySession, sumScores, type PricedTurn, type ReplayTurn } from "../src/replay.ts";
 
 const MINUTE = 60_000;
-const prices = new Map([["m", { inputPerToken: 1, outputPerToken: 5 }]]);
+const unitPrice = { inputPerToken: 1, outputPerToken: 5, readPerToken: 0.1, writePerToken: 1.25 };
+const prices = new Map([["m", unitPrice]]);
 
 function turn(atMinute: number, context: number, output = 0): ReplayTurn {
   return { atMs: atMinute * MINUTE, model: "m", input: 0, cacheRead: 0, cacheWrite: context, output, recordedCost: 1 };
@@ -42,7 +43,7 @@ test("a shrunk context after compaction reads only what is still cached", () => 
 
 test("a model switch is a cache break", () => {
   const other = { ...turn(1, 100), model: "n" };
-  const both = new Map([...prices, ["n", { inputPerToken: 1, outputPerToken: 5 }]]);
+  const both = new Map([...prices, ["n", unitPrice]]);
   assert.equal(replaySession([turn(0, 100), other], both, FIVE_MINUTE_POLICY).cacheBreaks, 1);
 });
 
@@ -54,6 +55,31 @@ test("unknown models keep their recorded cost", () => {
 test("totals add sessions and prices come from real token costs", () => {
   const a = replaySession([turn(0, 100)], prices, FIVE_MINUTE_POLICY);
   assert.equal(sumScores("all", [a, a]).cost, 2 * a.cost);
-  const derived = derivePrices([{ model: "m", input: 1000, output: 200, inputCost: 0.004, outputCost: 0.004 }]);
-  assert.deepEqual(derived.get("m"), { inputPerToken: 0.000004, outputPerToken: 0.00002 });
+});
+
+function priced(parts: Partial<PricedTurn>): PricedTurn {
+  return { model: "m", input: 0, output: 0, cacheRead: 0, cacheWrite: 0, inputCost: 0, outputCost: 0, readCost: 0, writeCost: 0, ...parts };
+}
+
+test("prices come from each recorded cost part", () => {
+  const derived = derivePricesFromCostParts([
+    priced({ input: 1000, inputCost: 0.004, output: 200, outputCost: 0.004, cacheRead: 10_000, readCost: 0.002, cacheWrite: 1000, writeCost: 0.005 }),
+  ]);
+  assert.deepEqual(derived.get("m"), { inputPerToken: 0.000004, outputPerToken: 0.00002, readPerToken: 0.0000002, writePerToken: 0.000005 });
+});
+
+test("a cache-heavy model with tiny uncached input is still priced", () => {
+  const derived = derivePricesFromCostParts([
+    priced({ model: "opus", input: 4, inputCost: 0.000016, output: 196, outputCost: 0.00392, cacheWrite: 24_772, writeCost: 0.12386 }),
+    priced({ model: "opus", input: 3, output: 300, outputCost: 0.006, cacheRead: 50_000, readCost: 0.01 }),
+  ]);
+  const opus = derived.get("opus");
+  assert.ok(opus);
+  assert.ok(Math.abs(opus.writePerToken - 0.000005) < 1e-12, `write ${opus.writePerToken}`);
+  assert.equal(opus.readPerToken, 0.0000002);
+  assert.equal(opus.inputPerToken, 0.000004);
+});
+
+test("a model with no output sample stays unpriced", () => {
+  assert.equal(derivePricesFromCostParts([priced({ input: 1000, inputCost: 0.004 })]).size, 0);
 });

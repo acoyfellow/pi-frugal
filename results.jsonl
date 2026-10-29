@@ -1,1 +1,1 @@
-{"kind":"baseline","at":"2026-10-29T12:50:37.132Z","offlineCost":252.5,"config":{"resumeIdleMin":60,"resumeWindowShare":0.5,"keepRecentTokens":30000,"reserveTokens":16384},"note":"dry run baseline, no live check yet"}
+{"kind":"baseline","at":"2026-10-29T13:01:23.449Z","offlineCost":251.7,"config":{"resumeIdleMin":60,"resumeWindowShare":0.5,"keepRecentTokens":30000,"reserveTokens":16384},"note":"prices from recorded cost parts, Opus included; unpriced turns are free models (0.1% of cost); no live check yet"}
