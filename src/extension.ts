@@ -1,4 +1,5 @@
-import { appendFileSync, mkdirSync } from "node:fs";
+import { appendFileSync, mkdirSync, writeFileSync } from "node:fs";
+import { parseSpillConfig, spillStub } from "./spill.ts";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
@@ -57,7 +58,7 @@ function lastAssistantOnBranch(ctx: ExtensionContext): AssistantLike | undefined
 }
 
 function emptyCounters(): RunCounters {
-  return { blockedSleeps: 0, compactions: 0, promptChanges: 0, memoryInjections: 0, memoryChars: 0, memoryUsed: 0 };
+  return { blockedSleeps: 0, compactions: 0, promptChanges: 0, memoryInjections: 0, memoryChars: 0, memoryUsed: 0, spills: 0 };
 }
 
 export default function frugal(pi: ExtensionAPI) {
@@ -117,6 +118,20 @@ export default function frugal(pi: ExtensionAPI) {
     if (!verdict.blocked) return undefined;
     counters.blockedSleeps++;
     return { block: true, reason: verdict.reason };
+  });
+
+  const spillConfig = parseSpillConfig(process.env.PI_FRUGAL_SPILL);
+  pi.on("tool_result", async (event) => {
+    if (!spillConfig || event.toolName === "read") return undefined;
+    if (event.content.some((part) => part.type !== "text")) return undefined;
+    const text = event.content.map((part) => (part.type === "text" ? part.text : "")).join("\n");
+    const path = join(frugalDir(), "spill", `${event.toolCallId.replace(/[^\w-]/g, "_")}.txt`);
+    const decision = spillStub(text, spillConfig, path);
+    if (!decision.spill) return undefined;
+    mkdirSync(join(frugalDir(), "spill"), { recursive: true });
+    writeFileSync(path, text);
+    counters.spills = (counters.spills ?? 0) + 1;
+    return { content: [{ type: "text", text: decision.stub }] };
   });
 
   pi.on("session_compact", async () => {

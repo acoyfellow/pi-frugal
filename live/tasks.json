@@ -1,0 +1,32 @@
+[
+  {
+    "id": "log-middle",
+    "prompt": "Run this bash command once: node live/fixture.mjs log 3000 4711. Then run: echo unrelated work done. Then answer: what is the value of order_id on the line that has status=FAILED? Reply with only the number.",
+    "expect": "4711"
+  },
+  {
+    "id": "log-tail",
+    "prompt": "Run this bash command once: node live/fixture.mjs tail 3000 ZEBRA-42. Then answer: what is the last token printed on the final line? Reply with only that token.",
+    "expect": "ZEBRA-42"
+  },
+  {
+    "id": "json-deep",
+    "prompt": "Run this bash command once: node live/fixture.mjs json 2500 9a7f. Then run: echo next. Then answer: what is the value of the field secret for the user named ada? Reply with only the value.",
+    "expect": "9a7f"
+  },
+  {
+    "id": "count-errors",
+    "prompt": "Run this bash command once: node live/fixture.mjs errors 3000 17. Then answer: how many lines contain the word ERROR? Reply with only the number.",
+    "expect": "17"
+  },
+  {
+    "id": "small-output",
+    "prompt": "Run this bash command once: node live/fixture.mjs log 20 1234. Then answer: what is the value of order_id on the line that has status=FAILED? Reply with only the number.",
+    "expect": "1234"
+  },
+  {
+    "id": "two-outputs",
+    "prompt": "Run this bash command: node live/fixture.mjs log 3000 5150. Then run: node live/fixture.mjs json 2500 c0de. Then answer with the FAILED order_id and ada's secret, separated by one space, and nothing else.",
+    "expect": "5150 c0de"
+  }
+]
