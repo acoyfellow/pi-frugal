@@ -137,7 +137,8 @@ const compaction: CompactionRule | undefined = compactAt > 0
   : undefined;
 
 const warmIdleMin = Number(process.env.TUNE_WARM_MAX_IDLE_MIN ?? "");
-const keepWarm = warmIdleMin > 0 ? { pingEveryMs: 4 * 60_000, maxIdleMs: warmIdleMin * 60_000 } : undefined;
+const pingEveryMin = Number(process.env.TUNE_WARM_EVERY_MIN ?? 4);
+const keepWarm = warmIdleMin > 0 ? { pingEveryMs: pingEveryMin * 60_000, maxIdleMs: warmIdleMin * 60_000 } : undefined;
 
 function replayRule(session: SessionFile, policy: (typeof policies)[number]) {
   const rebuilt = applyCompactionThreshold(applySpillAndImageDrop(session.events, spill, drop), compaction);
