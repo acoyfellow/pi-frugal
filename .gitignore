@@ -6,3 +6,4 @@ sweep.log
 live/out-*
 eval-r4-*.json
 eval-r5-*.json
+eval-r6-*.json

@@ -2,7 +2,7 @@ import { existsSync, readFileSync, readdirSync, statSync, writeFileSync } from "
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { applyCompactionThreshold, applySpillAndImageDrop, spillCount, type CompactionRule, type ImageDropRule, type SessionEvent, type SpillRule } from "../src/context-rules.ts";
-import { FIVE_MINUTE_POLICY, ONE_HOUR_POLICY, derivePricesFromCostParts, replaySession, sumScores, type PricedTurn, type ReplayTurn } from "../src/replay.ts";
+import { FIVE_MINUTE_POLICY, ONE_HOUR_POLICY, derivePricesFromCostParts, insertKeepWarmPings, replaySession, sumScores, type PricedTurn, type ReplayTurn } from "../src/replay.ts";
 
 interface RawUsage {
   input?: number;
@@ -136,8 +136,12 @@ const compaction: CompactionRule | undefined = compactAt > 0
   ? { thresholdTokens: compactAt, keepRecentTokens: Number(process.env.TUNE_KEEP_RECENT ?? 30_000), summaryTokens: 8_000 }
   : undefined;
 
+const warmIdleMin = Number(process.env.TUNE_WARM_MAX_IDLE_MIN ?? "");
+const keepWarm = warmIdleMin > 0 ? { pingEveryMs: 4 * 60_000, maxIdleMs: warmIdleMin * 60_000 } : undefined;
+
 function replayRule(session: SessionFile, policy: (typeof policies)[number]) {
   const rebuilt = applyCompactionThreshold(applySpillAndImageDrop(session.events, spill, drop), compaction);
+  if (keepWarm) return replaySession(insertKeepWarmPings(rebuilt.map((r) => r.turn), keepWarm), prices, policy);
   return replaySession(rebuilt.map((r) => r.turn), prices, policy, rebuilt.map((r) => r.prefixEditedFrom));
 }
 const result = {
@@ -148,8 +152,9 @@ const result = {
   models: [...prices.keys()],
   unpricedTurns: sessions.reduce((sum, session) => sum + session.turns.filter((turn) => !prices.has(turn.model)).length, 0),
   scores: policies.map((policy) => sumScores(policy.name, sessions.map((session) => replaySession(session.turns, prices, policy)))),
-  rule: spill || drop || compaction
+  rule: spill || drop || compaction || keepWarm
     ? {
+        keepWarm: keepWarm ?? null,
         spill: spill ?? null,
         drop: drop ?? null,
         compaction: compaction ?? null,

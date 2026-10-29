@@ -146,3 +146,26 @@ export function derivePricesFromCostParts(turns: readonly PricedTurn[]): Map<str
   }
   return prices;
 }
+
+export interface KeepWarmRule {
+  pingEveryMs: number;
+  maxIdleMs: number;
+}
+
+export function insertKeepWarmPings(turns: readonly ReplayTurn[], rule: KeepWarmRule | undefined): ReplayTurn[] {
+  if (!rule) return [...turns];
+  const out: ReplayTurn[] = [];
+  let previous: ReplayTurn | undefined;
+  for (const turn of turns) {
+    if (previous && previous.model === turn.model) {
+      const gap = turn.atMs - previous.atMs;
+      const limit = Math.min(gap, rule.maxIdleMs);
+      for (let at = previous.atMs + rule.pingEveryMs; at < previous.atMs + limit; at += rule.pingEveryMs) {
+        out.push({ ...previous, atMs: at, output: 1, recordedCost: 0 });
+      }
+    }
+    out.push(turn);
+    previous = turn;
+  }
+  return out;
+}

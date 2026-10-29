@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { FIVE_MINUTE_POLICY, ONE_HOUR_POLICY, derivePricesFromCostParts, replaySession, sumScores, type PricedTurn, type ReplayTurn } from "../src/replay.ts";
+import { FIVE_MINUTE_POLICY, ONE_HOUR_POLICY, derivePricesFromCostParts, insertKeepWarmPings, replaySession, sumScores, type PricedTurn, type ReplayTurn } from "../src/replay.ts";
 
 const MINUTE = 60_000;
 const unitPrice = { inputPerToken: 1, outputPerToken: 5, readPerToken: 0.1, writePerToken: 1.25 };
@@ -90,4 +90,28 @@ test("a cache-heavy model with tiny uncached input is still priced", () => {
 
 test("a model with no output sample stays unpriced", () => {
   assert.equal(derivePricesFromCostParts([priced({ input: 1000, inputCost: 0.004 })]).size, 0);
+});
+
+test("keep-warm pings fill an idle gap up to the idle limit", () => {
+  const rule = { pingEveryMs: 4 * MINUTE, maxIdleMs: 30 * MINUTE };
+  assert.deepEqual(insertKeepWarmPings([turn(0, 100), turn(13, 100)], rule).map((t) => t.atMs / MINUTE), [0, 4, 8, 12, 13]);
+  assert.equal(insertKeepWarmPings([turn(0, 100), turn(120, 100)], rule).length, 2 + 7);
+  assert.equal(insertKeepWarmPings([turn(0, 100), turn(3, 100)], rule).length, 2);
+  assert.equal(insertKeepWarmPings([turn(0, 100), turn(13, 100)], undefined).length, 2);
+});
+
+test("pings turn a short idle gap from a cache break into cheap reads", () => {
+  const rule = { pingEveryMs: 4 * MINUTE, maxIdleMs: 30 * MINUTE };
+  const turns = [turn(0, 100_000), turn(13, 100_000)];
+  const plain = replaySession(turns, prices, FIVE_MINUTE_POLICY);
+  const warm = replaySession(insertKeepWarmPings(turns, rule), prices, FIVE_MINUTE_POLICY);
+  assert.equal(plain.cacheBreaks, 1);
+  assert.equal(warm.cacheBreaks, 0);
+  assert.ok(warm.cost < plain.cost);
+});
+
+test("pings that run out before the user returns only add cost", () => {
+  const rule = { pingEveryMs: 4 * MINUTE, maxIdleMs: 30 * MINUTE };
+  const turns = [turn(0, 100_000), turn(120, 100_000)];
+  assert.ok(replaySession(insertKeepWarmPings(turns, rule), prices, FIVE_MINUTE_POLICY).cost > replaySession(turns, prices, FIVE_MINUTE_POLICY).cost);
 });
