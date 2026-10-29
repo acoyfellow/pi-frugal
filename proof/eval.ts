@@ -1,6 +1,7 @@
 import { existsSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { applySpill, spillCount, type SessionEvent, type SpillRule } from "../src/context-rules.ts";
 import { FIVE_MINUTE_POLICY, ONE_HOUR_POLICY, derivePricesFromCostParts, replaySession, sumScores, type PricedTurn, type ReplayTurn } from "../src/replay.ts";
 
 interface RawUsage {
@@ -15,6 +16,7 @@ interface SessionFile {
   path: string;
   turns: ReplayTurn[];
   raw: PricedTurn[];
+  events: SessionEvent[];
   kind: "terraloop" | "long" | "short";
 }
 
@@ -31,13 +33,35 @@ function listSessionFiles(): string[] {
   });
 }
 
+function toolResultEvent(content: unknown): SessionEvent {
+  const parts: unknown[] = Array.isArray(content) ? content : [content];
+  let chars = 0;
+  let images = 0;
+  for (const part of parts) {
+    if (typeof part === "string") chars += part.length;
+    if (typeof part !== "object" || part === null) continue;
+    if ("type" in part && part.type === "image") images++;
+    else if ("text" in part && typeof part.text === "string") chars += part.text.length;
+  }
+  return { kind: "tool-result", chars, images };
+}
+
 function readSession(path: string): SessionFile {
   const turns: ReplayTurn[] = [];
   const raw: SessionFile["raw"] = [];
+  const events: SessionEvent[] = [];
   let terraloop = false;
   for (const line of readFileSync(path, "utf8").split("\n")) {
     if (line.length === 0) continue;
     if (!terraloop && line.includes("terraloop_control")) terraloop = true;
+    if (line.includes("\"type\":\"compaction\"")) events.push({ kind: "compaction" });
+    if (line.includes("\"role\":\"toolResult\"")) {
+      const result: unknown = JSON.parse(line);
+      if (typeof result === "object" && result !== null && "message" in result && typeof result.message === "object" && result.message !== null && "content" in result.message) {
+        events.push(toolResultEvent(result.message.content));
+      }
+      continue;
+    }
     if (!line.includes("\"usage\"")) continue;
     const entry: unknown = JSON.parse(line);
     if (typeof entry !== "object" || entry === null || !("message" in entry)) continue;
@@ -56,6 +80,7 @@ function readSession(path: string): SessionFile {
       recordedCost: usage.cost?.total ?? 0,
     };
     turns.push(turn);
+    events.push({ kind: "turn", turn });
     raw.push({
       model,
       input: turn.input,
@@ -69,7 +94,7 @@ function readSession(path: string): SessionFile {
     });
   }
   const kind = terraloop ? "terraloop" : turns.length >= 150 ? "long" : "short";
-  return { path, turns, raw, kind };
+  return { path, turns, raw, events, kind };
 }
 
 function pickSet(): string[] {
@@ -95,6 +120,14 @@ if (!existsSync(setPath)) writeFileSync(setPath, `${JSON.stringify(set, null, 2)
 const sessions = set.filter((path) => existsSync(path)).map(readSession);
 const prices = derivePricesFromCostParts(sessions.flatMap((session) => session.raw));
 const policies = [FIVE_MINUTE_POLICY, ONE_HOUR_POLICY];
+
+function parseSpill(value: string | undefined): SpillRule | undefined {
+  if (!value) return undefined;
+  const [threshold, stub] = value.split(",").map(Number);
+  return threshold && stub !== undefined ? { thresholdChars: threshold, stubChars: stub } : undefined;
+}
+
+const spill = parseSpill(process.env.TUNE_SPILL);
 const result = {
   at: new Date().toISOString(),
   sessions: sessions.length,
@@ -103,6 +136,13 @@ const result = {
   models: [...prices.keys()],
   unpricedTurns: sessions.reduce((sum, session) => sum + session.turns.filter((turn) => !prices.has(turn.model)).length, 0),
   scores: policies.map((policy) => sumScores(policy.name, sessions.map((session) => replaySession(session.turns, prices, policy)))),
+  rule: spill
+    ? {
+        spill,
+        spills: sessions.reduce((sum, session) => sum + spillCount(session.events, spill), 0),
+        scores: policies.map((policy) => sumScores(policy.name, sessions.map((session) => replaySession(applySpill(session.events, spill), prices, policy)))),
+      }
+    : null,
 };
 writeFileSync(outPath, `${JSON.stringify(result, null, 2)}\n`);
 console.log(JSON.stringify(result, null, 2));

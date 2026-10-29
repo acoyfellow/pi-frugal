@@ -4,6 +4,7 @@ import { join } from "node:path";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import {
   comparePrompts,
+  dejaPrimerReport,
   judgeBashCommand,
   shouldCompactOnResume,
   snapshotPrompt,
@@ -56,7 +57,7 @@ function lastAssistantOnBranch(ctx: ExtensionContext): AssistantLike | undefined
 }
 
 function emptyCounters(): RunCounters {
-  return { blockedSleeps: 0, compactions: 0, promptChanges: 0 };
+  return { blockedSleeps: 0, compactions: 0, promptChanges: 0, memoryInjections: 0, memoryChars: 0, memoryUsed: 0 };
 }
 
 export default function frugal(pi: ExtensionAPI) {
@@ -65,6 +66,14 @@ export default function frugal(pi: ExtensionAPI) {
   let promptBaseline: PromptSnapshot | undefined;
   let resumeCompactionPending = false;
   let runsSinceStart = 0;
+
+  pi.events.on("deja:primer", (data) => {
+    const report = dejaPrimerReport(data);
+    if (!report) return;
+    counters.memoryInjections = (counters.memoryInjections ?? 0) + report.injections;
+    counters.memoryChars = (counters.memoryChars ?? 0) + report.chars;
+    counters.memoryUsed = (counters.memoryUsed ?? 0) + report.used;
+  });
 
   pi.on("session_start", async (_event, ctx) => {
     const last = lastAssistantOnBranch(ctx);

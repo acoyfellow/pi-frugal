@@ -8,6 +8,7 @@ import {
   timeLimitsSeconds,
   parseMetricsLines,
   reportMetrics,
+  dejaPrimerReport,
   shouldCompactOnResume,
   snapshotPrompt,
   summarizeRun,
@@ -161,4 +162,28 @@ test("time limits are read from timeout, gtimeout and perl alarm", () => {
   assert.deepEqual(timeLimitsSeconds("timeout 30s a; gtimeout 2m b"), [30, 120]);
   assert.deepEqual(timeLimitsSeconds("perl -e 'alarm shift; exec @ARGV' 1500 x"), [1500]);
   assert.deepEqual(timeLimitsSeconds("echo hi"), []);
+});
+
+test("deja primer events become memory counters and old metric lines still sum", () => {
+  assert.deepEqual(dejaPrimerReport({ outcome: "injected", notes: 2, chars: 840 }), { injections: 1, chars: 840, used: 0 });
+  assert.deepEqual(dejaPrimerReport({ outcome: "graded", shown: 2, used: 1 }), { injections: 0, chars: 0, used: 1 });
+  assert.equal(dejaPrimerReport({ outcome: "skipped", reason: "short" }), undefined);
+  assert.equal(dejaPrimerReport("nope"), undefined);
+  const withMemory = summarizeRun("a", "t", undefined, [turn(0, 1_000)], { ...counters, memoryInjections: 1, memoryChars: 840, memoryUsed: 1 });
+  const legacy = summarizeRun("b", "t", undefined, [turn(0, 1_000)], counters);
+  const report = reportMetrics(parseMetricsLines([JSON.stringify(withMemory), JSON.stringify(legacy)].join("\n")));
+  assert.equal(report.memoryInjections, 1);
+  assert.equal(report.memoryChars, 840);
+  assert.equal(report.memoryUsed, 1);
+});
+
+test("vitest only counts as a command, not inside file names or grep patterns", () => {
+  const blocked = (command: string) => judgeBashCommand(command).blocked;
+  assert.equal(blocked("npx vitest run"), true);
+  assert.equal(blocked("cd repo && npx vitest"), true);
+  assert.equal(blocked("vitest run"), true);
+  assert.equal(blocked("npx vitest run tests/a.test.ts"), false);
+  assert.equal(blocked("tail -5 /tmp/fsh-vitest.log"), false);
+  assert.equal(blocked("grep -n vitest test/core.test.ts"), false);
+  assert.equal(blocked("cat vitest.config.ts"), false);
 });

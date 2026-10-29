@@ -63,7 +63,7 @@ const LONG_SCRIPTS: readonly { name: string; pattern: RegExp }[] = [
   { name: "npm test", pattern: /\b(?:npm|pnpm|yarn|bun)\s+(?:run\s+)?test\b/ },
   { name: "npx test", pattern: /\bnpx\s+(?:jest|mocha|test)\b/ },
 ];
-const VITEST_CALL = /\bvitest\b((?:\s+[^\s;&|]+)*)/;
+const VITEST_CALL = /(?:^|[;&|(]\s*|\b(?:npx|pnpm|bunx|yarn|exec)\s+(?:--?\S+\s+)*|node_modules\/\.bin\/)vitest(?=\s|$)((?:\s+[^\s;&|]+)*)/;
 const VITEST_MODES = new Set(["run", "watch", "related"]);
 
 export const LONG_CALL_ALTERNATIVES =
@@ -212,6 +212,9 @@ export interface RunCounters {
   blockedSleeps: number;
   compactions: number;
   promptChanges: number;
+  memoryInjections?: number;
+  memoryChars?: number;
+  memoryUsed?: number;
 }
 
 export interface RunMetrics extends RunCounters {
@@ -279,6 +282,9 @@ export interface MetricsReport {
   blockedSleeps: number;
   compactions: number;
   promptChanges: number;
+  memoryInjections: number;
+  memoryChars: number;
+  memoryUsed: number;
   cost: number;
 }
 
@@ -309,6 +315,24 @@ export function reportMetrics(runs: readonly RunMetrics[]): MetricsReport {
     blockedSleeps: sum((run) => run.blockedSleeps),
     compactions: sum((run) => run.compactions),
     promptChanges: sum((run) => run.promptChanges),
+    memoryInjections: sum((run) => run.memoryInjections ?? 0),
+    memoryChars: sum((run) => run.memoryChars ?? 0),
+    memoryUsed: sum((run) => run.memoryUsed ?? 0),
     cost: Math.round(sum((run) => run.cost) * 100) / 100,
   };
+}
+
+export interface DejaPrimerReport {
+  injections: number;
+  chars: number;
+  used: number;
+}
+
+export function dejaPrimerReport(data: unknown): DejaPrimerReport | undefined {
+  if (typeof data !== "object" || data === null || !("outcome" in data)) return undefined;
+  const event = data as { outcome: unknown; chars?: unknown; used?: unknown };
+  const count = (value: unknown) => (typeof value === "number" && value > 0 ? value : 0);
+  if (event.outcome === "injected") return { injections: 1, chars: count(event.chars), used: 0 };
+  if (event.outcome === "graded") return { injections: 0, chars: 0, used: count(event.used) };
+  return undefined;
 }

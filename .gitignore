@@ -1,3 +1,5 @@
 node_modules
 eval.json
 tune-dry.log
+eval-spill-*.json
+sweep.log
