@@ -1,6 +1,6 @@
 import { existsSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { join, isAbsolute } from "node:path";
 import { applyCompactionThreshold, applySpillAndImageDrop, spillCount, type CompactionRule, type ImageDropRule, type SessionEvent, type SpillRule } from "../src/context-rules.ts";
 import { FIVE_MINUTE_POLICY, ONE_HOUR_POLICY, derivePricesFromCostParts, insertKeepWarmPings, replaySession, sumScores, type PricedTurn, type ReplayTurn } from "../src/replay.ts";
 
@@ -115,8 +115,10 @@ function pickSet(): string[] {
   return picked;
 }
 
-const set: string[] = existsSync(setPath) ? JSON.parse(readFileSync(setPath, "utf8")) : pickSet();
-if (!existsSync(setPath)) writeFileSync(setPath, `${JSON.stringify(set, null, 2)}\n`);
+const relative = (path: string) => (path.startsWith(sessionsRoot) ? path.slice(sessionsRoot.length + 1) : path);
+const stored: string[] = existsSync(setPath) ? JSON.parse(readFileSync(setPath, "utf8")) : pickSet().map(relative);
+if (!existsSync(setPath)) writeFileSync(setPath, `${JSON.stringify(stored, null, 2)}\n`);
+const set = stored.map((path) => (isAbsolute(path) ? path : join(sessionsRoot, path)));
 const sessions = set.filter((path) => existsSync(path)).map(readSession);
 const prices = derivePricesFromCostParts(sessions.flatMap((session) => session.raw));
 const policies = [FIVE_MINUTE_POLICY, ONE_HOUR_POLICY];

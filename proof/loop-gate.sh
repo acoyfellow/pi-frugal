@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
-export PATH=/Users/jcoeyman/.nvm/versions/node/v22.22.2/bin:$PATH
+export PATH="$(dirname "$(command -v node)"):$PATH"
 root="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$root"
 results="$root/results.jsonl"

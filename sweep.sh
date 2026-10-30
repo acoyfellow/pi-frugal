@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-export PATH=/Users/jcoeyman/.nvm/versions/node/v22.22.2/bin:$PATH
+export PATH="$(dirname "$(command -v node)"):$PATH"
 cd "$(dirname "$0")"
 for cfg in 4:5 4:15 4.5:10 3:10; do
   IFS=: read -r every idle <<<"$cfg"

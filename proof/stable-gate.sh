@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
-export PATH=/Users/jcoeyman/.nvm/versions/node/v22.22.2/bin:/Users/jcoeyman/.bun/bin:$PATH
+export PATH="$(dirname "$(command -v node)"):$PATH"
 root="$(cd "$(dirname "$0")/.." && pwd)"
-comments=/Users/jcoeyman/.pi/agent/extensions/no-added-comments
-terraloop=/Users/jcoeyman/cloudflare/terraloop-mode
+comments="${NO_COMMENTS_EXTENSION:-$HOME/.pi/agent/extensions/no-added-comments}"
+terraloop="${TERRALOOP_MODE:?set TERRALOOP_MODE to a terraloop-mode checkout}"
 
 echo "== 1. no-added-comments tests"
 (cd "$comments" && bun test)
@@ -17,7 +17,7 @@ echo "== 3. pi-frugal gate"
 echo "== 4. two runs in one session keep the prompt stable"
 work=$(mktemp -d)
 export PI_FRUGAL_DIR="$work/frugal"
-provider=/Users/jcoeyman/.pi/agent/extensions/opencode-cloudflare/index.ts
+provider="${PI_PROVIDER_EXTENSION:?set PI_PROVIDER_EXTENSION to your model provider extension}"
 run() {
   perl -e 'alarm shift; exec @ARGV' 180 pi -p --no-extensions --session-dir "$work/sessions" -e "$provider" \
     -e "$root/src/extension.ts" -e "$comments/src/extension.ts" -e "$terraloop/extension.ts" \
