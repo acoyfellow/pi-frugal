@@ -1,0 +1,29 @@
+proof/eval-set.json
+  s_5ddfc8f4108175::t_609cbee4414917 2-13
+proof/eval.ts
+  s_5ddfc8f4108175::t_495e182b389adc 3,118-121
+proof/gate.sh
+  s_5ddfc8f4108175::t_98648792ce2402 3
+proof/loop-gate.sh
+  s_5ddfc8f4108175::t_2d156720f50868 3
+proof/stable-gate.sh
+  s_5ddfc8f4108175::t_e4a4b5db0eba33 3,5-6,20
+sweep.sh
+  s_5ddfc8f4108175::t_179a128f8d82d9 2
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "dcac01d843fffb94c7ebc21d42f6c61b9126b64d",
+  "prompts": {},
+  "sessions": {
+    "s_5ddfc8f4108175": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0fc06-d951-77a8-8358-cd5dae6891bd",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Jordan Coeyman <jcoeyman@cloudflare.com>"
+    }
+  }
+}
