@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 set -uo pipefail
-export PATH=/Users/jcoeyman/.nvm/versions/node/v22.22.2/bin:$PATH
+export PATH="$(dirname "$(command -v node)"):$PATH"
 root="$(cd "$(dirname "$0")/.." && pwd)"
 out="$root/live/out-warm"
 rm -rf "$out"
 mkdir -p "$out"
-provider=/Users/jcoeyman/.pi/agent/extensions/opencode-cloudflare/index.ts
+provider="${PI_PROVIDER_EXTENSION:?set PI_PROVIDER_EXTENSION to your model provider extension}"
 
 run_id=$(date +%s)
 for arm in pinged control; do

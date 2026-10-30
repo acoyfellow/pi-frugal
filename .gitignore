@@ -8,3 +8,7 @@ eval-r4-*.json
 eval-r5-*.json
 eval-r6-*.json
 eval-r7-*.json
+
+.DS_Store
+live/out-*/
+*.log
