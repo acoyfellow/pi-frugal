@@ -148,6 +148,9 @@ test("long tool calls follow the case table", () => {
 test("long call blocks say how to run it in the background", () => {
   for (const command of ["perl -e 'alarm shift; exec @ARGV' 1500 ./x.sh", "./proof/gate.sh"]) {
     const { reason } = judgeLongCommand(command);
+    assert.match(reason, /timeout 110 <command>/);
+    assert.ok(reason.indexOf("timeout 110") < reason.indexOf("nohup"), "the foreground time limit comes first");
+    assert.match(reason, /never a shared path/);
     assert.match(reason, /nohup/);
     assert.match(reason, /> log 2>&1 &/);
     assert.match(reason, /end the turn/);

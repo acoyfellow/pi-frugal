@@ -67,7 +67,7 @@ const VITEST_CALL = /(?:^|[;&|(]\s*|\b(?:npx|pnpm|bunx|yarn|exec)\s+(?:--?\S+\s+
 const VITEST_MODES = new Set(["run", "watch", "related"]);
 
 export const LONG_CALL_ALTERNATIVES =
-  `Run it in the background (nohup <command> > log 2>&1 &, or a background job that notifies on finish), end the turn, and check with loops_task. A human can end the command with "${ALLOW_LONG_MARKER}" to run it anyway.`;
+  `If it can finish in under ${MAX_TOOL_CALL_SECONDS}s, add a time limit and run it in the foreground so you see its real output: timeout 110 <command> (or perl -e 'alarm 110; exec @ARGV' <command>). Only if it needs longer, run it in the background (nohup <command> > log 2>&1 &, or a background job that notifies on finish), end the turn, and check with loops_task. Write that log to a fresh file in this project, never a shared path like /tmp/deploy.log, and read only that file. A human can end the command with "${ALLOW_LONG_MARKER}" to run it anyway.`;
 
 function secondsOf(value: string, unit: string): number {
   return Number(value) * (UNIT_SECONDS[unit] ?? 1);
