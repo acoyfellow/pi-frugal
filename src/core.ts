@@ -73,11 +73,14 @@ function secondsOf(value: string, unit: string): number {
   return Number(value) * (UNIT_SECONDS[unit] ?? 1);
 }
 
-export function timeLimitsSeconds(command: string): number[] {
+const PERL_ALARM_LITERAL = /perl\s+-e\s+(['"])[^'"]*\balarm\s*\(?\s*(\d+)[^'"]*\1/g;
+
+export function timeLimitsSeconds(command: string, code: string = command): number[] {
   const limits: number[] = [];
-  for (const match of command.matchAll(TIMEOUT_LIMIT)) limits.push(secondsOf(match[1], match[2]));
+  for (const match of code.matchAll(TIMEOUT_LIMIT)) limits.push(secondsOf(match[1], match[2]));
   for (const match of command.matchAll(PERL_SHIFT_LIMIT)) limits.push(Number(match[2]));
-  for (const match of command.matchAll(ALARM_LITERAL_LIMIT)) limits.push(Number(match[1]));
+  const literals = code === command ? command.matchAll(ALARM_LITERAL_LIMIT) : command.matchAll(PERL_ALARM_LITERAL);
+  for (const match of literals) limits.push(Number(match[match.length - 1]));
   return limits;
 }
 
@@ -94,11 +97,11 @@ export function longScriptName(command: string): string | undefined {
   return vitestRunsEverything(command) ? "vitest without a file" : undefined;
 }
 
-export function judgeLongCommand(command: string): WaitVerdict {
+export function judgeLongCommand(command: string, rawCommand: string = command): WaitVerdict {
   const trimmed = command.trimEnd();
   if (trimmed.endsWith(ALLOW_LONG_MARKER)) return { blocked: false, reason: "" };
   if (BACKGROUND_RUN.test(trimmed)) return { blocked: false, reason: "" };
-  const limits = timeLimitsSeconds(trimmed);
+  const limits = timeLimitsSeconds(rawCommand, command);
   const longest = Math.max(0, ...limits);
   if (longest > MAX_TOOL_CALL_SECONDS) {
     return {
@@ -116,7 +119,24 @@ export function judgeLongCommand(command: string): WaitVerdict {
   return { blocked: false, reason: "" };
 }
 
-export function judgeBashCommand(command: string): WaitVerdict {
+const HEREDOC = /<<-?\s*(['"]?)(\w+)\1[^\n]*\n[\s\S]*?\n\s*\2\s*(?=\n|$)/g;
+const SHELL_C = /(\bnohup\s+)?\b(?:bash|sh|zsh)\s+(?:-\w+\s+)*-c\s+(['"])([\s\S]*?)\2([^\n;|]*)/g;
+const QUOTED = /'[^']*'|"(?:[^"\\]|\\.)*"/g;
+
+export function shellCode(command: string): string {
+  const inner: string[] = [];
+  const withoutHeredocs = command.replace(HEREDOC, "<<HEREDOC");
+  for (const match of withoutHeredocs.matchAll(SHELL_C)) {
+    const backgrounded = Boolean(match[1]) || /&\s*(?:disown\b|$)/.test(match[4] ?? "");
+    if (!backgrounded) inner.push(match[3]);
+  }
+  const outer = withoutHeredocs.replace(QUOTED, "''");
+  return [outer, ...inner.map(shellCode)].join("\n");
+}
+
+export function judgeBashCommand(rawCommand: string): WaitVerdict {
+  const marked = rawCommand.trimEnd().endsWith(ALLOW_LONG_MARKER);
+  const command = shellCode(rawCommand) + (marked ? ` ${ALLOW_LONG_MARKER}` : "");
   const loop = LOOP_PATTERN.exec(command);
   if (loop && SLEEP_WORD.test(command)) {
     return { blocked: true, reason: `pi-frugal blocked a ${loop[1]} loop that polls with sleep. ${WAIT_ALTERNATIVES}` };
@@ -125,7 +145,7 @@ export function judgeBashCommand(command: string): WaitVerdict {
   if (seconds > MAX_SLEEP_SECONDS) {
     return { blocked: true, reason: `pi-frugal blocked sleep ${seconds}s (limit ${MAX_SLEEP_SECONDS}s). ${WAIT_ALTERNATIVES}` };
   }
-  return judgeLongCommand(command);
+  return judgeLongCommand(command, rawCommand);
 }
 
 export interface PromptSnapshot {
