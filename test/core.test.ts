@@ -190,3 +190,16 @@ test("vitest only counts as a command, not inside file names or grep patterns", 
   assert.equal(blocked("grep -n vitest test/core.test.ts"), false);
   assert.equal(blocked("cat vitest.config.ts"), false);
 });
+
+test("npm test only counts as a command, not inside strings or scripts", () => {
+  const blocked = (command: string) => judgeBashCommand(command).blocked;
+  assert.equal(blocked("npm test"), true);
+  assert.equal(blocked("cd repo && npm test"), true);
+  assert.equal(blocked("bun run test"), true);
+  assert.equal(blocked("pnpm --filter web test"), true);
+  assert.equal(blocked("npx jest"), true);
+  assert.equal(blocked("perl -e 'alarm shift; exec @ARGV' 90 npm test"), false);
+  assert.equal(blocked(`python3 - <<'EOF'\nprint("Run 'npm test'")\nEOF`), false);
+  assert.equal(blocked("grep -n 'npm test' README.md"), false);
+  assert.equal(blocked("echo the bun test suite passed"), false);
+});

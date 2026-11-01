@@ -60,8 +60,8 @@ const LONG_SCRIPTS: readonly { name: string; pattern: RegExp }[] = [
   { name: "a proof/ script", pattern: runsScript(String.raw`proof/\S+`) },
   { name: "wrangler deploy", pattern: /\bwrangler\s+deploy\b/ },
   { name: "ship.sh", pattern: runsScript(String.raw`ship\.sh\b`) },
-  { name: "npm test", pattern: /\b(?:npm|pnpm|yarn|bun)\s+(?:run\s+)?test\b/ },
-  { name: "npx test", pattern: /\bnpx\s+(?:jest|mocha|test)\b/ },
+  { name: "npm test", pattern: /(?:^|[;&|(]\s*|\b(?:exec|env|time)\s+)(?:npm|pnpm|yarn|bun)\s+(?:--?\S+\s+(?:[^-\s;&|]\S*\s+)?)*(?:run\s+)?test(?=\s|$|;|&|\|)/ },
+  { name: "npx test", pattern: /(?:^|[;&|(]\s*)npx\s+(?:--?\S+\s+)*(?:jest|mocha|test)(?=\s|$|;|&|\|)/ },
 ];
 const VITEST_CALL = /(?:^|[;&|(]\s*|\b(?:npx|pnpm|bunx|yarn|exec)\s+(?:--?\S+\s+)*|node_modules\/\.bin\/)vitest(?=\s|$)((?:\s+[^\s;&|]+)*)/;
 const VITEST_MODES = new Set(["run", "watch", "related"]);
