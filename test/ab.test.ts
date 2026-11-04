@@ -27,3 +27,8 @@ test("fixed env setting wins, otherwise only the on arm spills", () => {
   assert.equal(spillForArm(undefined, ab, "off"), undefined);
   assert.equal(spillForArm(undefined, undefined, "on"), undefined);
 });
+
+test("afterTurn command is read from the top level of config", () => {
+  assert.deepEqual(parseAbConfig({ ab: { spill: "10000,1600" }, afterTurn: "echo hi" }), { spill: { thresholdChars: 10_000, stubChars: 1_600 }, afterTurn: "echo hi" });
+  assert.deepEqual(parseAbConfig({ ab: { spill: "10000,1600" }, afterTurn: "  " }), { spill: { thresholdChars: 10_000, stubChars: 1_600 } });
+});

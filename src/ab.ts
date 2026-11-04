@@ -6,6 +6,7 @@ export type Arm = "on" | "off";
 
 export interface AbConfig {
   spill: SpillConfig;
+  afterTurn?: string;
 }
 
 export function armForSession(sessionId: string): Arm {
@@ -23,7 +24,10 @@ export function parseAbConfig(raw: unknown): AbConfig | undefined {
   if (typeof ab !== "object" || ab === null || !("spill" in ab)) return undefined;
   const spillValue = (ab as { spill: unknown }).spill;
   const spill = typeof spillValue === "string" ? parseSpillConfig(spillValue) : undefined;
-  return spill ? { spill } : undefined;
+  const afterTurnValue = (raw as { afterTurn?: unknown }).afterTurn;
+  const afterTurn = typeof afterTurnValue === "string" && afterTurnValue.trim() ? afterTurnValue : undefined;
+  if (!spill) return undefined;
+  return afterTurn ? { spill, afterTurn } : { spill };
 }
 
 export function readAbConfig(dir: string): AbConfig | undefined {

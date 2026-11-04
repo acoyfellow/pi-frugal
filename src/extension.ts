@@ -1,4 +1,5 @@
 import { appendFileSync, mkdirSync, writeFileSync } from "node:fs";
+import { spawn } from "node:child_process";
 import { parseSpillConfig, spillStub, type SpillConfig } from "./spill.ts";
 import { armForSession, readAbConfig, spillForArm, type Arm } from "./ab.ts";
 import { homedir } from "node:os";
@@ -30,6 +31,13 @@ function appendJsonLine(fileName: string, value: unknown): void {
   const dir = frugalDir();
   mkdirSync(dir, { recursive: true });
   appendFileSync(join(dir, fileName), `${JSON.stringify(value)}\n`);
+}
+
+function refreshAfterTurn(command: string | undefined): void {
+  if (!command) return;
+  const child = spawn("sh", ["-c", command], { detached: true, stdio: "ignore" });
+  child.on("error", () => {});
+  child.unref();
 }
 
 function isAssistantWithUsage(message: unknown): message is AssistantLike {
@@ -164,5 +172,6 @@ export default function frugal(pi: ExtensionAPI) {
     appendJsonLine("metrics.jsonl", metrics);
     if (turns.length > 0) previousRunLastTurn = turns[turns.length - 1];
     counters = emptyCounters();
+    refreshAfterTurn(process.env.PI_FRUGAL_AFTER_TURN ?? abConfig?.afterTurn);
   });
 }
