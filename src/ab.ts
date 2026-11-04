@@ -56,3 +56,42 @@ export function readFixedSpill(dir: string): SpillConfig | undefined {
     return undefined;
   }
 }
+
+export interface CompactAb {
+  thresholdTokens: number;
+  since: string;
+}
+
+export function parseCompactAb(raw: unknown): CompactAb | undefined {
+  if (typeof raw !== "object" || raw === null) return undefined;
+  const block = (raw as { compactAb?: unknown }).compactAb;
+  if (typeof block !== "object" || block === null) return undefined;
+  const { thresholdTokens, since } = block as { thresholdTokens?: unknown; since?: unknown };
+  if (typeof thresholdTokens !== "number" || !(thresholdTokens >= 50_000) || typeof since !== "string") return undefined;
+  return { thresholdTokens, since };
+}
+
+export function readCompactAb(dir: string): CompactAb | undefined {
+  const path = join(dir, "config.json");
+  if (!existsSync(path)) return undefined;
+  try {
+    return parseCompactAb(JSON.parse(readFileSync(path, "utf8")));
+  } catch {
+    return undefined;
+  }
+}
+
+export function shouldCompactAfterRun(contextTokens: number | undefined, ab: CompactAb | undefined, arm: Arm | undefined): boolean {
+  return Boolean(ab && arm === "on" && contextTokens !== undefined && contextTokens >= ab.thresholdTokens);
+}
+
+export function readAfterTurn(dir: string): string | undefined {
+  const path = join(dir, "config.json");
+  if (!existsSync(path)) return undefined;
+  try {
+    const value = (JSON.parse(readFileSync(path, "utf8")) as { afterTurn?: unknown }).afterTurn;
+    return typeof value === "string" && value.trim() ? value : undefined;
+  } catch {
+    return undefined;
+  }
+}

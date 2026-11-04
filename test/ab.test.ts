@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { armForSession, parseAbConfig, readFixedSpill, spillForArm } from "../src/ab.ts";
+import { armForSession, parseAbConfig, readAfterTurn, readCompactAb, readFixedSpill, shouldCompactAfterRun, spillForArm, parseCompactAb } from "../src/ab.ts";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -42,4 +42,23 @@ test("top-level spill in config turns spill on for everyone", () => {
   assert.deepEqual(readFixedSpill(dir), { thresholdChars: 10_000, stubChars: 1_600 });
   writeFileSync(join(dir, "config.json"), JSON.stringify({ ab: { spill: "10000,1600" } }));
   assert.equal(readFixedSpill(dir), undefined);
+});
+
+test("afterTurn works without an ab block", () => {
+  const dir = mkdtempSync(join(tmpdir(), "frugal-"));
+  writeFileSync(join(dir, "config.json"), JSON.stringify({ spill: "10000,1600", afterTurn: "echo hi" }));
+  assert.equal(readAfterTurn(dir), "echo hi");
+});
+
+test("compact A/B: only the on arm compacts, and only past the threshold", () => {
+  const ab = parseCompactAb({ compactAb: { thresholdTokens: 200_000, since: "2026-11-04T20:30" } });
+  assert.deepEqual(ab, { thresholdTokens: 200_000, since: "2026-11-04T20:30" });
+  assert.equal(shouldCompactAfterRun(250_000, ab, "on"), true);
+  assert.equal(shouldCompactAfterRun(150_000, ab, "on"), false);
+  assert.equal(shouldCompactAfterRun(250_000, ab, "off"), false);
+  assert.equal(shouldCompactAfterRun(undefined, ab, "on"), false);
+  assert.equal(parseCompactAb({ compactAb: { thresholdTokens: 1000, since: "x" } }), undefined);
+  const dir = mkdtempSync(join(tmpdir(), "frugal-"));
+  writeFileSync(join(dir, "config.json"), JSON.stringify({ compactAb: { thresholdTokens: 200_000, since: "s" } }));
+  assert.deepEqual(readCompactAb(dir), { thresholdTokens: 200_000, since: "s" });
 });

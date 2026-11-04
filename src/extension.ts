@@ -1,7 +1,7 @@
 import { appendFileSync, mkdirSync, writeFileSync } from "node:fs";
 import { spawn } from "node:child_process";
 import { parseSpillConfig, spillStub, type SpillConfig } from "./spill.ts";
-import { armForSession, readAbConfig, readFixedSpill, spillForArm, type Arm } from "./ab.ts";
+import { armForSession, readAbConfig, readAfterTurn, readCompactAb, readFixedSpill, shouldCompactAfterRun, spillForArm, type Arm } from "./ab.ts";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
@@ -78,6 +78,8 @@ export default function frugal(pi: ExtensionAPI) {
   let runsSinceStart = 0;
   const fixedSpill = parseSpillConfig(process.env.PI_FRUGAL_SPILL) ?? readFixedSpill(frugalDir());
   const abConfig = readAbConfig(frugalDir());
+  const compactAb = readCompactAb(frugalDir());
+  const afterTurnCommand = readAfterTurn(frugalDir());
   let arm: Arm | undefined;
   let spillConfig: SpillConfig | undefined = fixedSpill;
 
@@ -95,7 +97,7 @@ export default function frugal(pi: ExtensionAPI) {
     promptBaseline = snapshotPrompt(ctx.getSystemPrompt(), pi.getActiveTools());
     counters = emptyCounters();
     runsSinceStart = 0;
-    arm = abConfig && !fixedSpill ? armForSession(ctx.sessionManager.getSessionId()) : undefined;
+    arm = (abConfig && !fixedSpill) || compactAb ? armForSession(ctx.sessionManager.getSessionId()) : undefined;
     spillConfig = spillForArm(fixedSpill, abConfig, arm);
   });
 
@@ -172,6 +174,9 @@ export default function frugal(pi: ExtensionAPI) {
     appendJsonLine("metrics.jsonl", metrics);
     if (turns.length > 0) previousRunLastTurn = turns[turns.length - 1];
     counters = emptyCounters();
-    refreshAfterTurn(process.env.PI_FRUGAL_AFTER_TURN ?? abConfig?.afterTurn);
+    refreshAfterTurn(process.env.PI_FRUGAL_AFTER_TURN ?? afterTurnCommand);
+    if (shouldCompactAfterRun(ctx.getContextUsage()?.tokens, compactAb, arm)) {
+      ctx.compact({ customInstructions: "pi-frugal: context passed the early-compaction threshold. Keep what the next prompt needs: goals, decisions, open work, file paths." });
+    }
   });
 }
