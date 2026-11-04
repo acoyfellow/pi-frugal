@@ -236,6 +236,8 @@ export interface RunCounters {
   memoryChars?: number;
   memoryUsed?: number;
   spills?: number;
+  toolErrors?: number;
+  arm?: string;
 }
 
 export interface RunMetrics extends RunCounters {

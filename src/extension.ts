@@ -1,5 +1,6 @@
 import { appendFileSync, mkdirSync, writeFileSync } from "node:fs";
-import { parseSpillConfig, spillStub } from "./spill.ts";
+import { parseSpillConfig, spillStub, type SpillConfig } from "./spill.ts";
+import { armForSession, readAbConfig, spillForArm, type Arm } from "./ab.ts";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
@@ -58,7 +59,7 @@ function lastAssistantOnBranch(ctx: ExtensionContext): AssistantLike | undefined
 }
 
 function emptyCounters(): RunCounters {
-  return { blockedSleeps: 0, compactions: 0, promptChanges: 0, memoryInjections: 0, memoryChars: 0, memoryUsed: 0, spills: 0 };
+  return { blockedSleeps: 0, compactions: 0, promptChanges: 0, memoryInjections: 0, memoryChars: 0, memoryUsed: 0, spills: 0, toolErrors: 0 };
 }
 
 export default function frugal(pi: ExtensionAPI) {
@@ -67,6 +68,10 @@ export default function frugal(pi: ExtensionAPI) {
   let promptBaseline: PromptSnapshot | undefined;
   let resumeCompactionPending = false;
   let runsSinceStart = 0;
+  const fixedSpill = parseSpillConfig(process.env.PI_FRUGAL_SPILL);
+  const abConfig = readAbConfig(frugalDir());
+  let arm: Arm | undefined;
+  let spillConfig: SpillConfig | undefined = fixedSpill;
 
   pi.events.on("deja:primer", (data) => {
     const report = dejaPrimerReport(data);
@@ -82,6 +87,8 @@ export default function frugal(pi: ExtensionAPI) {
     promptBaseline = snapshotPrompt(ctx.getSystemPrompt(), pi.getActiveTools());
     counters = emptyCounters();
     runsSinceStart = 0;
+    arm = abConfig && !fixedSpill ? armForSession(ctx.sessionManager.getSessionId()) : undefined;
+    spillConfig = spillForArm(fixedSpill, abConfig, arm);
   });
 
   pi.on("input", async (event, ctx) => {
@@ -120,8 +127,8 @@ export default function frugal(pi: ExtensionAPI) {
     return { block: true, reason: verdict.reason };
   });
 
-  const spillConfig = parseSpillConfig(process.env.PI_FRUGAL_SPILL);
   pi.on("tool_result", async (event) => {
+    if (event.isError) counters.toolErrors = (counters.toolErrors ?? 0) + 1;
     if (!spillConfig || event.toolName === "read") return undefined;
     if (event.content.some((part) => part.type !== "text")) return undefined;
     const text = event.content.map((part) => (part.type === "text" ? part.text : "")).join("\n");
@@ -153,7 +160,7 @@ export default function frugal(pi: ExtensionAPI) {
 
   pi.on("agent_end", async (event, ctx) => {
     const turns = event.messages.filter(isAssistantWithUsage).map(toTurnUsage);
-    const metrics = summarizeRun(ctx.sessionManager.getSessionId(), new Date().toISOString(), previousRunLastTurn, turns, counters);
+    const metrics = summarizeRun(ctx.sessionManager.getSessionId(), new Date().toISOString(), previousRunLastTurn, turns, arm ? { ...counters, arm } : counters);
     appendJsonLine("metrics.jsonl", metrics);
     if (turns.length > 0) previousRunLastTurn = turns[turns.length - 1];
     counters = emptyCounters();
