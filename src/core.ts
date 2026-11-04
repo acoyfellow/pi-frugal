@@ -238,6 +238,7 @@ export interface RunCounters {
   spills?: number;
   toolErrors?: number;
   arm?: string;
+  compactArm?: string;
 }
 
 export interface RunMetrics extends RunCounters {

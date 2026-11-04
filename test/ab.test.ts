@@ -62,3 +62,12 @@ test("compact A/B: only the on arm compacts, and only past the threshold", () =>
   writeFileSync(join(dir, "config.json"), JSON.stringify({ compactAb: { thresholdTokens: 200_000, since: "s" } }));
   assert.deepEqual(readCompactAb(dir), { thresholdTokens: 200_000, since: "s" });
 });
+
+test("a salt gives an independent split", () => {
+  let same = 0;
+  for (let index = 0; index < 2000; index++) {
+    const id = `session-${index}-${index * 7919}`;
+    if (armForSession(id) === armForSession(id, "compact:")) same++;
+  }
+  assert.ok(same > 900 && same < 1100, `same=${same}`);
+});

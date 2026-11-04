@@ -9,10 +9,11 @@ export interface AbConfig {
   afterTurn?: string;
 }
 
-export function armForSession(sessionId: string): Arm {
+export function armForSession(sessionId: string, salt = ""): Arm {
+  const key = `${salt}${sessionId}`;
   let hash = 2166136261;
-  for (let index = 0; index < sessionId.length; index++) {
-    hash ^= sessionId.charCodeAt(index);
+  for (let index = 0; index < key.length; index++) {
+    hash ^= key.charCodeAt(index);
     hash = Math.imul(hash, 16777619);
   }
   return (hash >>> 0) % 2 === 0 ? "on" : "off";

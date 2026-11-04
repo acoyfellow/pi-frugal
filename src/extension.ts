@@ -81,6 +81,7 @@ export default function frugal(pi: ExtensionAPI) {
   const compactAb = readCompactAb(frugalDir());
   const afterTurnCommand = readAfterTurn(frugalDir());
   let arm: Arm | undefined;
+  let compactArm: Arm | undefined;
   let spillConfig: SpillConfig | undefined = fixedSpill;
 
   pi.events.on("deja:primer", (data) => {
@@ -97,7 +98,8 @@ export default function frugal(pi: ExtensionAPI) {
     promptBaseline = snapshotPrompt(ctx.getSystemPrompt(), pi.getActiveTools());
     counters = emptyCounters();
     runsSinceStart = 0;
-    arm = (abConfig && !fixedSpill) || compactAb ? armForSession(ctx.sessionManager.getSessionId()) : undefined;
+    arm = abConfig && !fixedSpill ? armForSession(ctx.sessionManager.getSessionId()) : undefined;
+    compactArm = compactAb ? armForSession(ctx.sessionManager.getSessionId(), "compact:") : undefined;
     spillConfig = spillForArm(fixedSpill, abConfig, arm);
   });
 
@@ -170,12 +172,12 @@ export default function frugal(pi: ExtensionAPI) {
 
   pi.on("agent_end", async (event, ctx) => {
     const turns = event.messages.filter(isAssistantWithUsage).map(toTurnUsage);
-    const metrics = summarizeRun(ctx.sessionManager.getSessionId(), new Date().toISOString(), previousRunLastTurn, turns, arm ? { ...counters, arm } : counters);
+    const metrics = summarizeRun(ctx.sessionManager.getSessionId(), new Date().toISOString(), previousRunLastTurn, turns, { ...counters, ...(arm ? { arm } : {}), ...(compactArm ? { compactArm } : {}) });
     appendJsonLine("metrics.jsonl", metrics);
     if (turns.length > 0) previousRunLastTurn = turns[turns.length - 1];
     counters = emptyCounters();
     refreshAfterTurn(process.env.PI_FRUGAL_AFTER_TURN ?? afterTurnCommand);
-    if (shouldCompactAfterRun(ctx.getContextUsage()?.tokens, compactAb, arm)) {
+    if (shouldCompactAfterRun(ctx.getContextUsage()?.tokens, compactAb, compactArm)) {
       ctx.compact({ customInstructions: "pi-frugal: context passed the early-compaction threshold. Keep what the next prompt needs: goals, decisions, open work, file paths." });
     }
   });
