@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { armForSession } from "../src/ab.ts";
 
 interface Row {
   sessionId: string;
@@ -46,7 +47,8 @@ const rows: Row[] = readFileSync(join(dir, "metrics.jsonl"), "utf8")
       return [];
     }
   })
-  .filter((row) => row[field] && row.endedAt >= since && row.turns > 0);
+  .filter((row) => row[field] && row.endedAt >= since && row.turns > 0)
+  .filter((row) => field !== "compactArm" || row.compactArm === armForSession(row.sessionId, "compact:"));
 
 function summarize(arm: string): ArmSummary {
   const armRows = rows.filter((row) => row[field] === arm);
