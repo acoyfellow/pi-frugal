@@ -1,7 +1,7 @@
 import { appendFileSync, mkdirSync, writeFileSync } from "node:fs";
 import { spawn } from "node:child_process";
 import { parseSpillConfig, spillStub, type SpillConfig } from "./spill.ts";
-import { armForSession, readAbConfig, spillForArm, type Arm } from "./ab.ts";
+import { armForSession, readAbConfig, readFixedSpill, spillForArm, type Arm } from "./ab.ts";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
@@ -76,7 +76,7 @@ export default function frugal(pi: ExtensionAPI) {
   let promptBaseline: PromptSnapshot | undefined;
   let resumeCompactionPending = false;
   let runsSinceStart = 0;
-  const fixedSpill = parseSpillConfig(process.env.PI_FRUGAL_SPILL);
+  const fixedSpill = parseSpillConfig(process.env.PI_FRUGAL_SPILL) ?? readFixedSpill(frugalDir());
   const abConfig = readAbConfig(frugalDir());
   let arm: Arm | undefined;
   let spillConfig: SpillConfig | undefined = fixedSpill;

@@ -5,7 +5,7 @@ A [Pi](https://github.com/earendil-works/pi) extension that cuts model cost with
 | Rule | What it does |
 |---|---|
 | Long-wait guard | Blocks long `sleep`s, sleep-poll loops and unbounded test or gate runs. It tells the agent to background the job and check later instead of holding the turn. |
-| Output spill | Writes text tool output over 10,000 characters to a file and gives the model a 1,600-character stub with the path |
+| Output spill | Writes text tool output over 10,000 characters to a file and gives the model a 1,600-character stub with the path. Live A/B (25 vs 21 sessions): 27% lower cost per turn, fewer tool errors. Turn on with `{"spill":"10000,1600"}` in `~/.pi/agent/frugal/config.json`. |
 | Stable prompt | Flags extensions that rewrite the system prompt every turn, which breaks the prompt cache |
 | Keep-warm | While idle, pings every few minutes so the prompt cache stays warm, then stops |
 

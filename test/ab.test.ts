@@ -1,6 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { armForSession, parseAbConfig, spillForArm } from "../src/ab.ts";
+import { armForSession, parseAbConfig, readFixedSpill, spillForArm } from "../src/ab.ts";
+import { mkdtempSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
 
 test("arm is stable for a session id", () => {
   assert.equal(armForSession("01a19ccb-b18f"), armForSession("01a19ccb-b18f"));
@@ -31,4 +34,12 @@ test("fixed env setting wins, otherwise only the on arm spills", () => {
 test("afterTurn command is read from the top level of config", () => {
   assert.deepEqual(parseAbConfig({ ab: { spill: "10000,1600" }, afterTurn: "echo hi" }), { spill: { thresholdChars: 10_000, stubChars: 1_600 }, afterTurn: "echo hi" });
   assert.deepEqual(parseAbConfig({ ab: { spill: "10000,1600" }, afterTurn: "  " }), { spill: { thresholdChars: 10_000, stubChars: 1_600 } });
+});
+
+test("top-level spill in config turns spill on for everyone", () => {
+  const dir = mkdtempSync(join(tmpdir(), "frugal-"));
+  writeFileSync(join(dir, "config.json"), JSON.stringify({ spill: "10000,1600" }));
+  assert.deepEqual(readFixedSpill(dir), { thresholdChars: 10_000, stubChars: 1_600 });
+  writeFileSync(join(dir, "config.json"), JSON.stringify({ ab: { spill: "10000,1600" } }));
+  assert.equal(readFixedSpill(dir), undefined);
 });

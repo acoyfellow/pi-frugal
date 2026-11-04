@@ -45,3 +45,14 @@ export function spillForArm(fixed: SpillConfig | undefined, ab: AbConfig | undef
   if (ab && arm === "on") return ab.spill;
   return undefined;
 }
+
+export function readFixedSpill(dir: string): SpillConfig | undefined {
+  const path = join(dir, "config.json");
+  if (!existsSync(path)) return undefined;
+  try {
+    const raw = JSON.parse(readFileSync(path, "utf8")) as { spill?: unknown };
+    return typeof raw.spill === "string" ? parseSpillConfig(raw.spill) : undefined;
+  } catch {
+    return undefined;
+  }
+}
