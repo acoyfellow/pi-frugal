@@ -16,6 +16,18 @@ export function armForSession(sessionId: string, salt = ""): Arm {
     hash ^= key.charCodeAt(index);
     hash = Math.imul(hash, 16777619);
   }
+  hash ^= hash >>> 16;
+  hash = Math.imul(hash, 0x85ebca6b);
+  hash ^= hash >>> 13;
+  return salt ? ((hash >>> 0) % 2 === 0 ? "on" : "off") : legacyArm(sessionId);
+}
+
+function legacyArm(sessionId: string): Arm {
+  let hash = 2166136261;
+  for (let index = 0; index < sessionId.length; index++) {
+    hash ^= sessionId.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
   return (hash >>> 0) % 2 === 0 ? "on" : "off";
 }
 
