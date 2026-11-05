@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { armForSession } from "../src/ab.ts";
@@ -37,6 +37,17 @@ const asJson = process.argv.includes("--json");
 const fieldArg = process.argv.find((arg) => arg.startsWith("--field="));
 const field = (fieldArg ? fieldArg.slice(8) : "arm") as "arm" | "compactArm";
 
+const sessionsDir = process.env.PI_SESSIONS_DIR ?? join(homedir(), ".pi", "agent", "sessions");
+const savedSessionIds = new Set<string>();
+for (const folder of readdirSync(sessionsDir, { withFileTypes: true })) {
+  if (!folder.isDirectory()) continue;
+  for (const file of readdirSync(join(sessionsDir, folder.name))) {
+    const match = /_([0-9a-f-]{36})\.jsonl$/.exec(file);
+    if (match) savedSessionIds.add(match[1]);
+  }
+}
+const population = process.argv.find((arg) => arg.startsWith("--population="))?.slice(13) ?? "interactive";
+
 const rows: Row[] = readFileSync(join(dir, "metrics.jsonl"), "utf8")
   .split("\n")
   .filter(Boolean)
@@ -48,7 +59,8 @@ const rows: Row[] = readFileSync(join(dir, "metrics.jsonl"), "utf8")
     }
   })
   .filter((row) => row[field] && row.endedAt >= since && row.turns > 0)
-  .filter((row) => field !== "compactArm" || row.compactArm === armForSession(row.sessionId, "compact:"));
+  .filter((row) => field !== "compactArm" || row.compactArm === armForSession(row.sessionId, "compact:"))
+  .filter((row) => population === "all" || (population === "interactive") === savedSessionIds.has(row.sessionId));
 
 function summarize(arm: string): ArmSummary {
   const armRows = rows.filter((row) => row[field] === arm);
@@ -128,10 +140,11 @@ function permutationP(): number {
 
 const pValue = permutationP();
 const significant = pValue < 0.05;
-const result = { since, field, on, off, savingPct, enough, pValue, significant };
+const result = { since, field, population, on, off, savingPct, enough, pValue, significant };
 
 if (asJson) console.log(JSON.stringify(result));
 else {
+  console.log(`population: ${population} (saved sessions only unless --population=headless or all)`);
   console.log("arm  sessions  turns   cost$   $/turn   cacheHit%  spills  errors/turn");
   for (const s of [on, off]) {
     console.log(
