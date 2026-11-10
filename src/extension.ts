@@ -8,7 +8,6 @@ import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-a
 import {
   comparePrompts,
   dejaPrimerReport,
-  judgeBashCommand,
   shouldCompactOnResume,
   snapshotPrompt,
   summarizeRun,
@@ -127,16 +126,6 @@ export default function frugal(pi: ExtensionAPI) {
       onError: deliver,
     });
     return { action: "handled" };
-  });
-
-  pi.on("tool_call", async (event) => {
-    if (event.toolName !== "bash") return undefined;
-    const command = event.input.command;
-    if (typeof command !== "string") return undefined;
-    const verdict = judgeBashCommand(command);
-    if (!verdict.blocked) return undefined;
-    counters.blockedSleeps++;
-    return { block: true, reason: verdict.reason };
   });
 
   pi.on("tool_result", async (event) => {
