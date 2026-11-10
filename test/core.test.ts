@@ -11,6 +11,7 @@ import {
   dejaPrimerReport,
   shouldCompactOnResume,
   snapshotPrompt,
+  stripLargeImages,
   summarizeRun,
   type TurnUsage,
 } from "../src/core.ts";
@@ -202,4 +203,35 @@ test("npm test only counts as a command, not inside strings or scripts", () => {
   assert.equal(blocked(`python3 - <<'EOF'\nprint("Run 'npm test'")\nEOF`), false);
   assert.equal(blocked("grep -n 'npm test' README.md"), false);
   assert.equal(blocked("echo the bun test suite passed"), false);
+});
+
+test("stripLargeImages replaces only large images and keeps the path", () => {
+  const big = { type: "image" as const, data: "x".repeat(200_001), mimeType: "image/png" };
+  const small = { type: "image" as const, data: "y".repeat(100), mimeType: "image/png" };
+  const text = { type: "text" as const, text: "Read image file [image/png]" };
+  const result = stripLargeImages([text, small, big], { path: "/tmp/shot.png" });
+  assert.equal(result.stripped, 1);
+  assert.equal(result.savedChars, 200_001);
+  assert.equal(result.content[0], text);
+  assert.equal(result.content[1], small);
+  const placeholder = result.content[2];
+  assert.equal(placeholder.type, "text");
+  assert.match(placeholder.type === "text" ? placeholder.text : "", /\/tmp\/shot\.png/);
+  assert.match(placeholder.type === "text" ? placeholder.text : "", /Re-read/);
+});
+
+test("stripLargeImages finds the saved path in codemode text", () => {
+  const big = { type: "image" as const, data: "x".repeat(300_000), mimeType: "image/png" };
+  const text = { type: "text" as const, text: "[Image saved to /var/tmp/pi-codemode-1.png (image/png, 90.5KB)]" };
+  const result = stripLargeImages([text, big], {});
+  assert.equal(result.stripped, 1);
+  const placeholder = result.content[1];
+  assert.match(placeholder.type === "text" ? placeholder.text : "", /pi-codemode-1\.png/);
+});
+
+test("stripLargeImages leaves small images untouched", () => {
+  const small = { type: "image" as const, data: "y".repeat(50), mimeType: "image/png" };
+  const result = stripLargeImages([small], { path: "/tmp/a.png" });
+  assert.equal(result.stripped, 0);
+  assert.equal(result.content[0], small);
 });

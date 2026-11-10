@@ -4,6 +4,52 @@ export const MAX_SLEEP_SECONDS = 5;
 export const BIG_CONTEXT_TOKENS = 200_000;
 export const CACHE_BREAK_WRITE_TOKENS = 100_000;
 
+export const IMAGE_STRIP_CHARS = 200_000;
+
+export interface ImageContentPart {
+  type: "image";
+  data: string;
+  mimeType?: string;
+}
+
+export interface TextContentPart {
+  type: "text";
+  text: string;
+}
+
+export type StrippableContentPart = ImageContentPart | TextContentPart;
+
+function imagePathFromText(content: readonly StrippableContentPart[]): string | undefined {
+  for (const part of content) {
+    if (part.type !== "text") continue;
+    const match = part.text.match(/\[Image saved to (\/\S+?)\s*\(/) ?? part.text.match(/(\/[^^\s"']+?\.(?:png|jpe?g|webp|gif))\b/i);
+    if (match?.[1]) return match[1];
+  }
+  return undefined;
+}
+
+export function stripLargeImages(
+  content: readonly StrippableContentPart[],
+  input: Record<string, unknown> | undefined,
+  thresholdChars: number = IMAGE_STRIP_CHARS,
+): { content: StrippableContentPart[]; stripped: number; savedChars: number } {
+  let stripped = 0;
+  let savedChars = 0;
+  const path = typeof input?.path === "string" && input.path.length > 0 ? input.path : imagePathFromText(content);
+  const next = content.map((part) => {
+    if (part.type !== "image" || part.data.length <= thresholdChars) return part;
+    stripped += 1;
+    savedChars += part.data.length;
+    const kb = Math.round((part.data.length * 3) / 4 / 1024);
+    const where = path ? `, ${path}` : "";
+    return {
+      type: "text" as const,
+      text: `[image stripped: ${part.mimeType ?? "image"}${where}, ~${kb}KB. Re-read the file if you need to see it again.]`,
+    };
+  });
+  return { content: next, stripped, savedChars };
+}
+
 export interface ResumeInput {
   nowMs: number;
   lastAssistantMs: number | undefined;
@@ -237,6 +283,8 @@ export interface RunCounters {
   memoryUsed?: number;
   spills?: number;
   toolErrors?: number;
+  imagesStripped?: number;
+  imageCharsSaved?: number;
   arm?: string;
   compactArm?: string;
 }

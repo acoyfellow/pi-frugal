@@ -9,6 +9,7 @@ import {
   comparePrompts,
   dejaPrimerReport,
   shouldCompactOnResume,
+  stripLargeImages,
   snapshotPrompt,
   summarizeRun,
   type PromptSnapshot,
@@ -130,9 +131,14 @@ export default function frugal(pi: ExtensionAPI) {
 
   pi.on("tool_result", async (event) => {
     if (event.isError) counters.toolErrors = (counters.toolErrors ?? 0) + 1;
-    if (!spillConfig || event.toolName === "read") return undefined;
-    if (event.content.some((part) => part.type !== "text")) return undefined;
-    const text = event.content.map((part) => (part.type === "text" ? part.text : "")).join("\n");
+    const strippedImages = stripLargeImages(event.content, event.input);
+    if (strippedImages.stripped > 0) {
+      counters.imagesStripped = (counters.imagesStripped ?? 0) + strippedImages.stripped;
+      counters.imageCharsSaved = (counters.imageCharsSaved ?? 0) + strippedImages.savedChars;
+    }
+    if (!spillConfig || event.toolName === "read") return strippedImages.stripped > 0 ? { content: strippedImages.content } : undefined;
+    if (strippedImages.content.some((part) => part.type !== "text")) return undefined;
+    const text = strippedImages.content.map((part) => (part.type === "text" ? part.text : "")).join("\n");
     const path = join(frugalDir(), "spill", `${event.toolCallId.replace(/[^\w-]/g, "_")}.txt`);
     const decision = spillStub(text, spillConfig, path);
     if (!decision.spill) return undefined;
