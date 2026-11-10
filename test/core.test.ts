@@ -235,3 +235,10 @@ test("stripLargeImages leaves small images untouched", () => {
   assert.equal(result.stripped, 0);
   assert.equal(result.content[0], small);
 });
+
+test("stripLargeImages never strips user clipboard images", () => {
+  const big = { type: "image" as const, data: "x".repeat(500_000), mimeType: "image/png" };
+  const result = stripLargeImages([big], { path: "/var/folders/T/clipboard-2026-11-10-ABC.png" });
+  assert.equal(result.stripped, 0);
+  assert.equal(result.content[0], big);
+});

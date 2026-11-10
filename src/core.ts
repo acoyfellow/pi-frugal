@@ -36,6 +36,7 @@ export function stripLargeImages(
   let stripped = 0;
   let savedChars = 0;
   const path = typeof input?.path === "string" && input.path.length > 0 ? input.path : imagePathFromText(content);
+  if (path?.includes("clipboard-")) return { content: [...content], stripped: 0, savedChars: 0 };
   const next = content.map((part) => {
     if (part.type !== "image" || part.data.length <= thresholdChars) return part;
     stripped += 1;
