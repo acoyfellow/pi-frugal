@@ -8,7 +8,6 @@ import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-a
 import {
   comparePrompts,
   dejaPrimerReport,
-  shouldCompactOnResume,
   stripLargeImages,
   snapshotPrompt,
   summarizeRun,
@@ -74,7 +73,6 @@ export default function frugal(pi: ExtensionAPI) {
   let counters = emptyCounters();
   let previousRunLastTurn: TurnUsage | undefined;
   let promptBaseline: PromptSnapshot | undefined;
-  let resumeCompactionPending = false;
   let runsSinceStart = 0;
   const fixedSpill = parseSpillConfig(process.env.PI_FRUGAL_SPILL) ?? readFixedSpill(frugalDir());
   const abConfig = readAbConfig(frugalDir());
@@ -101,32 +99,6 @@ export default function frugal(pi: ExtensionAPI) {
     arm = abConfig && !fixedSpill ? armForSession(ctx.sessionManager.getSessionId()) : undefined;
     compactArm = compactAb ? armForSession(ctx.sessionManager.getSessionId(), "compact:") : undefined;
     spillConfig = spillForArm(fixedSpill, abConfig, arm);
-  });
-
-  pi.on("input", async (event, ctx) => {
-    if (resumeCompactionPending || event.streamingBehavior !== undefined || event.source === "extension") {
-      return { action: "continue" };
-    }
-    const usage = ctx.getContextUsage();
-    const decision = shouldCompactOnResume({
-      nowMs: Date.now(),
-      lastAssistantMs: lastAssistantOnBranch(ctx)?.timestamp,
-      contextTokens: usage?.tokens,
-      contextWindow: usage?.contextWindow,
-    });
-    if (!decision) return { action: "continue" };
-    resumeCompactionPending = true;
-    const deliver = () => {
-      resumeCompactionPending = false;
-      pi.sendUserMessage(event.images?.length ? [{ type: "text", text: event.text }, ...event.images] : event.text);
-    };
-    if (ctx.hasUI) ctx.ui.notify("pi-frugal: cache is cold and context is large, compacting before this prompt", "info");
-    ctx.compact({
-      customInstructions: "Session resumed after idle time; the prompt cache expired. Keep what the next prompt needs.",
-      onComplete: deliver,
-      onError: deliver,
-    });
-    return { action: "handled" };
   });
 
   pi.on("tool_result", async (event) => {
